@@ -1,23 +1,49 @@
-import jwt
 from fastapi import FastAPI, HTTPException, Depends, Body, Header
+from contextlib import asynccontextmanager
+from jwt.exceptions import InvalidTokenError
 from sqlalchemy.orm import Session
 from sqlmodel import Session, select
 from typing import Annotated, List
+import jwt
+import json
+import base64
+import dotenv
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+
 
 from .models import (
     RoomCreate,
-    RoomType,
     User,
     Room,
-    Message,
-    RoomValidationException,
+    SQLModel,
     engine,
 )
 
-app = FastAPI()
+dotenv.load_dotenv()
 
 
-JWT_KEY = ""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    SQLModel.metadata.create_all(engine)
+    yield
+    SQLModel.metadata.drop_all(engine)
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+JWT_KEY = """
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr+gOQGmyRCXO7UWGT9ub
+Pap1jn+HFDk6i7RGXNQQagpan0OvDmo26IpT/fL9QfUpIvz+TaWRw+n171oduqK0
+Qksv/hjHVYnHB+EcZ6TlyebTk1wCXxDTs0XLH2ugbSJtnhida/JBToeMzcArfPbU
+ag6ZqBjNQqQXXe+gUvG8Ln0U9ZLfclz9NDqebdcHeVnQ+L4mOJiXHz5CHOcfPRhW
+YI+rXIDC1zylWeQV0Dxcd0JThaVWnpiJA+ciBZzs9Hnf9zlaw63mS4sRBGGbjonx
+tVe8eFWj9KDa7XbeQf6bG5T0Vfh8hLcwtg8jgkE+6IrrVR3HHHHEC/9JyoBsIrcZ
+bwIDAQAB
+-----END PUBLIC KEY-----
+"""
 
 
 def get_session():
@@ -36,20 +62,36 @@ def get_user(
     token = authorization.split(" ")[1]  # Extract the actual token
 
     try:
-        # Decode and verify the JWT token
-        payload = jwt.decode(token, JWT_KEY, algorithms=["HS256", "RS256"])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        # Verify the JWT using the public key
+        payload = jwt.decode(
+            token,
+            JWT_KEY,
+            algorithms=["RS256"],  # Ensure this matches the algorithm in the JWT header
+            options={
+                "verify_aud": False
+            },  # Disable audience verification for this example
+        )
 
-    user = User(username=payload["username"])
+    except InvalidTokenError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+
+    # get or create the user
+    user = session.exec(
+        select(User).where(User.username == payload["preferred_username"])
+    ).first()
+    print("User: ", user)
 
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        user = User(username=payload["preferred_username"])
+        session.add(user)
+        session.commit()
+        session.refresh(user)
 
     return user
 
+@app.get("/rooms/", response_model=List[Room])
+def get_rooms(session: Annotated[Session, Depends(get_session)]):
+    return session.exec(select(Room)).all()
 
 # Endpoint to create a room (private or universal)
 @app.post("/rooms/", response_model=Room)
@@ -58,13 +100,11 @@ def create_room(
     user: Annotated[User, Depends(get_user)],
     session: Annotated[Session, Depends(get_session)],
 ):
-    db_room = Room.model_validate(
-        room, context={"owner": session.get(User, room.owner_id)}
-    )
+    db_room: Room = Room.model_validate(room, context={"owner": user})
     session.add(db_room)
     session.commit()
-    session.refresh(room)
-    return room
+    session.refresh(db_room)
+    return db_room
 
 
 #
