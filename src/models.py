@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from typing import Optional
 from sqlmodel import Relationship, Field, SQLModel, Session, create_engine, select
 import secrets
 
@@ -15,6 +16,10 @@ def generate_id():
 
 # Exceptions
 class RoomValidationException(Exception):
+    pass
+
+
+class RoomNotFoundException(Exception):
     pass
 
 
@@ -37,9 +42,9 @@ class RoomMessagesLink(SQLModel, table=True):
 
 class User(SQLModel, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
-    username: str = Field(default="", max_length=50)
-    mindplex_id: str | None = Field(default=None)
-    keyclock_id: str | None = Field(default=None)
+    username: str = Field(default="", max_length=50, unique=True)
+    mindplex_id: str | None = Field(default=None, unique=True)
+    keyclock_id: str | None = Field(default=None, unique=True)
 
     rooms: list["Room"] = Relationship(
         back_populates="participants", link_model=RoomParticipantLink
@@ -69,10 +74,11 @@ class Room(RoomBase, table=True):
         back_populates="rooms", link_model=RoomMessagesLink
     )
 
-    owner_id: str | None = Field(default=None, foreign_key="user.id")
-    owner: User | None = Relationship(back_populates="owned_rooms")
+    owner_id: str = Field(foreign_key="user.id")
+    owner: User = Relationship(back_populates="owned_rooms")
+    created: datetime = Field(default_factory=datetime.now)
 
-    def add_participant(self, participant: "User"):
+    async def add_participant(self, participant: "User"):
         """add a participant to the room and commit to db.
 
         Raises:
@@ -87,7 +93,7 @@ class Room(RoomBase, table=True):
 
         self.participants.append(participant)
 
-    def add_message(self, message: "Message"):
+    async def add_message(self, message: "Message"):
         """add a message to the room and commit to db.
 
         Args:
@@ -107,7 +113,7 @@ class Room(RoomBase, table=True):
 
         return message
 
-    def is_in_room(self, user: "User"):
+    async def is_in_room(self, user: "User"):
         """checks if a user is in the room as a participant or owner
 
         Args:
@@ -118,12 +124,20 @@ class Room(RoomBase, table=True):
         """
         return user in self.participants or user.id == self.owner_id
 
+    @classmethod
+    async def get_by_id(
+        cls, room_id: str, session: Session, raise_exc: bool = True
+    ) -> Optional["Room"]:
+        room = session.exec(select(cls).where(cls.id == room_id)).first()
+        if room is None and raise_exc:
+            raise RoomNotFoundException("Room not found")
+        return room
+
 
 class RoomCreate(RoomBase):
     participants: list[User] = Relationship(
         back_populates="rooms", link_model=RoomParticipantLink
     )
-    owner: User | None = Relationship(back_populates="owned_rooms")
 
 
 class Message(SQLModel, table=True):

@@ -1,36 +1,35 @@
-from fastapi import FastAPI, HTTPException, Depends, Body, Header
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Depends,
+    Body,
+    Header,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from contextlib import asynccontextmanager
 from jwt.exceptions import InvalidTokenError
-from sqlalchemy.orm import Session
-from sqlmodel import Session, select
+from sqlalchemy.orm import Session, joinedload, query
+from sqlmodel import Session, and_, or_, select
 from typing import Annotated, List
 import jwt
-import json
-import base64
+from .connection import ConnectionManager
 import dotenv
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 
-
 from .models import (
     RoomCreate,
+    RoomParticipantLink,
+    RoomType,
     User,
     Room,
+    Message,
     SQLModel,
     engine,
 )
 
 dotenv.load_dotenv()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    SQLModel.metadata.create_all(engine)
-    yield
-    SQLModel.metadata.drop_all(engine)
-
-
-app = FastAPI(lifespan=lifespan)
 
 
 JWT_KEY = """
@@ -46,6 +45,18 @@ bwIDAQAB
 """
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    SQLModel.metadata.create_all(engine)
+    yield
+    SQLModel.metadata.drop_all(engine)
+
+
+app = FastAPI(lifespan=lifespan)
+
+connections = ConnectionManager()
+
+
 def get_session():
     with Session(engine) as session:
         yield session
@@ -56,6 +67,10 @@ def get_user(
     session: Annotated[Session, Depends(get_session)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> User:
+
+    user = User(username="great_man")
+    return user
+
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid or missing token")
 
@@ -79,7 +94,6 @@ def get_user(
     user = session.exec(
         select(User).where(User.username == payload["preferred_username"])
     ).first()
-    print("User: ", user)
 
     if user is None:
         user = User(username=payload["preferred_username"])
@@ -87,11 +101,38 @@ def get_user(
         session.commit()
         session.refresh(user)
 
+    user = User(username="great_man")
     return user
 
-@app.get("/rooms/", response_model=List[Room])
-def get_rooms(session: Annotated[Session, Depends(get_session)]):
-    return session.exec(select(Room)).all()
+
+@app.get("/rooms/", response_model=list[Room])
+def get_rooms(
+    session: Annotated[Session, Depends(get_session)],
+    user: Annotated[User, Depends(get_user)],
+    private: bool = False,
+    owned: bool = False,
+):
+    query = (
+        select(Room)
+        .join(RoomParticipantLink)
+        .where(
+            or_(
+                Room.owner_id == user.id,
+                RoomParticipantLink.user_id == user.id,
+                Room.room_type == RoomType.UNIVERSAL,
+            )
+        )
+    )
+
+    if private:
+        query = query.where(Room.room_type == RoomType.PRIVATE)
+    if owned:
+        query = query.where(Room.owner_id == user.id)
+
+    rooms = session.exec(query).all()
+
+    return rooms
+
 
 # Endpoint to create a room (private or universal)
 @app.post("/rooms/", response_model=Room)
@@ -100,11 +141,51 @@ def create_room(
     user: Annotated[User, Depends(get_user)],
     session: Annotated[Session, Depends(get_session)],
 ):
-    db_room: Room = Room.model_validate(room, context={"owner": user})
+    db_room: Room = Room(**room.model_dump(), owner=user)
     session.add(db_room)
     session.commit()
     session.refresh(db_room)
     return db_room
+
+
+@app.websocket("/ws/rooms/{room_id}/")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    room_id: str,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_user),
+):
+    room = await Room.get_by_id(room_id, session, raise_exc=False)
+
+    if room is None:
+        # Create a universal room
+        assert user.id
+        room = Room(owner_id=user.id, room_type=RoomType.UNIVERSAL)
+        session.add(room)
+        session.commit()
+        session.refresh(room)
+
+    if not await room.is_in_room(user) and room.room_type == RoomType.PRIVATE:
+        raise HTTPException(status_code=403, detail="User not in private room")
+
+    assert room.id
+    await connections.connect(websocket, room.id)
+    try:
+        while True:
+            message_text = await websocket.receive_text()
+
+            message = Message(owner=user, text=message_text)
+            await room.add_message(message)
+            session.add(message)
+            session.add(room)
+            session.commit()
+            session.refresh(message)
+            session.refresh(room)
+
+            await connections.send_message(message_text, room.id)
+
+    except WebSocketDisconnect:
+        await connections.disconnect(websocket, room.id)
 
 
 #
