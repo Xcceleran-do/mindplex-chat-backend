@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+from pydantic import BaseModel
 from sqlmodel import Relationship, Field, SQLModel, Session, create_engine, select
 import secrets
 
@@ -43,8 +44,8 @@ class RoomMessagesLink(SQLModel, table=True):
 class User(SQLModel, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
     username: str = Field(default="", max_length=50, unique=True)
-    mindplex_id: str | None = Field(default=None, unique=True)
-    keyclock_id: str | None = Field(default=None, unique=True)
+    mindplex_id: str | None = Field(default=None)
+    keyclock_id: str | None = Field(default=None)
 
     rooms: list["Room"] = Relationship(
         back_populates="participants", link_model=RoomParticipantLink
@@ -85,7 +86,7 @@ class Room(RoomBase, table=True):
             RoomValidationException: if the participant is already in the room
             RoomValidationException: if the room is private and the room has > 2 participants
         """
-        if self.is_in_room(participant):
+        if await self.is_in_room(participant):
             raise RoomValidationException("Participant is already in the room")
 
         if self.room_type == RoomType.PRIVATE and len(self.participants) == 2:
@@ -94,7 +95,7 @@ class Room(RoomBase, table=True):
         self.participants.append(participant)
 
     async def add_message(self, message: "Message"):
-        """add a message to the room and commit to db.
+        """add a message to the room.
 
         Args:
             message (Message): the message to add
