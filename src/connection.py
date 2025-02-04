@@ -14,6 +14,15 @@ class ConnectionManager:
     async def disconnect(self, websocket: WebSocket, room_id: str):
         self.active_connections[room_id].remove(websocket)
 
-    async def send_message(self, message: str, room_id: str):
+    async def send_message(self, message: str, room_id: str, websocket: WebSocket):
+        """
+        Send a message to a specific room excluding the sender.
+
+        Args:
+            message (str): the message to send
+            room_id (str): the room to send the message to
+            websocket (WebSocket): the websocket to exclude
+        """
         for connection in self.active_connections[room_id]:
-            await connection.send_text(message)
+            if connection != websocket:
+                await connection.send_text(message)
