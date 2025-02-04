@@ -1,6 +1,6 @@
 # Dependency to validate JWT and return the user
 from typing import Annotated
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 from fastapi.datastructures import Headers
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session, select
@@ -13,9 +13,9 @@ def get_session():
         yield session
 
 
-async def get_user(authorization: str, session: Session) -> User:
+def get_user(authorization: str, session: Session) -> User:
     """Given Authorization header as string, authenticates and returns the user.
-    Creates the user if it doesn't exisit.
+    Creates the user if it doesn't exist.
 
     Raises:
         HTTPException: if the header is malformed
@@ -38,9 +38,12 @@ async def get_user(authorization: str, session: Session) -> User:
     """
 
     # test user
-    # assert authorization
-    # user = User(username=authorization)
-    # return user
+    assert authorization
+    user = session.exec(
+        select(User).where(User.username == "great_man")
+    ).first()
+    assert user
+    return user
 
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid or missing token")
@@ -80,4 +83,14 @@ async def get_user_dep(
     authorization: Annotated[str | None, Headers()] = None,
 ) -> User:
     assert authorization
-    return await get_user(authorization, session)
+    return get_user(authorization, session)
+
+
+async def get_user_from_qp_dep(
+    session: Annotated[Session, Depends(get_session)], token: Annotated[str, Query()]
+) -> User | str:
+    try:
+        authorization = f"Bearer {token}"
+        return get_user(authorization, session)
+    except HTTPException as e:
+        return str(e)
