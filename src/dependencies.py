@@ -37,14 +37,6 @@ def get_user(authorization: str, session: Session) -> User:
     -----END PUBLIC KEY-----
     """
 
-    # test user
-    assert authorization
-    user = session.exec(
-        select(User).where(User.username == "great_man")
-    ).first()
-    assert user
-    return user
-
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid or missing token")
 
@@ -69,6 +61,7 @@ def get_user(authorization: str, session: Session) -> User:
         select(User).where(User.username == payload["preferred_username"])
     ).first()
 
+    print("Username: ", payload["preferred_username"])
     if user is None:
         user = User(username=payload["preferred_username"])
         session.add(user)
@@ -82,7 +75,9 @@ async def get_user_dep(
     session: Annotated[Session, Depends(get_session)],
     authorization: Annotated[str | None, Headers()] = None,
 ) -> User:
-    assert authorization
+    if authorization is None:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+
     return get_user(authorization, session)
 
 
