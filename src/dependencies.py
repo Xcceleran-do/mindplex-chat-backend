@@ -1,7 +1,5 @@
-# Dependency to validate JWT and return the user
 from typing import Annotated
-from fastapi import Depends, HTTPException, Query
-from fastapi.datastructures import Headers
+from fastapi import Depends, HTTPException, Header, Query
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session, select
 from src.models import User, engine
@@ -61,9 +59,12 @@ def get_user(authorization: str, session: Session) -> User:
         select(User).where(User.username == payload["preferred_username"])
     ).first()
 
-    print("Username: ", payload["preferred_username"])
     if user is None:
-        user = User(username=payload["preferred_username"])
+        user = User(
+            id=payload["sub"],
+            username=payload["preferred_username"],
+            keyclock_id=payload["sub"],
+        )
         session.add(user)
         session.commit()
         session.refresh(user)
@@ -73,11 +74,8 @@ def get_user(authorization: str, session: Session) -> User:
 
 async def get_user_dep(
     session: Annotated[Session, Depends(get_session)],
-    authorization: Annotated[str | None, Headers()] = None,
+    authorization: Annotated[str, Header()],
 ) -> User:
-    if authorization is None:
-        raise HTTPException(status_code=401, detail="Missing authorization header")
-
     return get_user(authorization, session)
 
 
