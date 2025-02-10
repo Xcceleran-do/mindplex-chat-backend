@@ -84,6 +84,12 @@ def create_room(
     user: Annotated[User, Depends(get_user_dep)],
     session: Annotated[Session, Depends(get_session)],
 ):
+
+    if room.room_type == RoomType.PRIVATE:
+        if len(room.participants) == 0:
+            raise HTTPException(
+                status_code=400, detail="Private room must have exactly one participant"
+            )
     try:
         db_room: Room = Room(**room.model_dump(), owner=user)
         session.add(db_room)
@@ -111,6 +117,16 @@ async def get_room_messages(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
+
     room = await Room.get_by_id(room_id, session, raise_exc=True)
+
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    if not await room.is_in_room(user):
+        raise HTTPException(
+            status_code=403, detail="User does not have access to this room"
+        )
+
     assert room is not None
     return room.messages
