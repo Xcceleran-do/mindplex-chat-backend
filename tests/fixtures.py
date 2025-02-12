@@ -1,3 +1,4 @@
+import uuid
 import pytest
 from src.api import Keyclock
 from src.models import RoomType, SQLModel, Room, User, Message, engine
@@ -41,9 +42,9 @@ def client_fixture(engine):
 
 @pytest.fixture(name="users")
 def users_fixture(session: Session):
-    user = User(username="dave")
-    user1 = User(username="tony")
-    user2 = User(username="ivan")
+    user = User(keyclock_id=str(uuid.uuid4()))
+    user1 = User(keyclock_id=str(uuid.uuid4()))
+    user2 = User(keyclock_id=str(uuid.uuid4()))
     session.add(user)
     session.add(user1)
     session.add(user2)

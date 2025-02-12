@@ -51,6 +51,7 @@ class TestRoom:
         exc_info = None
         with pytest.raises(RoomValidationException) as e:
             exc_info = e
+            print("Room: ", rooms[0])
             await rooms[0].add_participant(users[0])
             session.commit()
         assert exc_info

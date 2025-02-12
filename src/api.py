@@ -1,11 +1,25 @@
 from datetime import datetime, timedelta
 import os
-from typing import Any
+from typing import Annotated, Any
+import uuid
 import dotenv
 import httpx
-from pydantic import Json
+from pydantic import BaseModel, Field, Json, ValidationError
 
 dotenv.load_dotenv()
+
+
+class KeyclockApiException(Exception):
+    pass
+
+
+class KeyclockUser(BaseModel):
+    id: uuid.UUID
+    username: str
+    firstName: str
+    lastName: str
+    email: str
+    created_timestamp: Annotated[int, Field(alias="createdTimestamp")]
 
 
 class Keyclock:
@@ -47,9 +61,27 @@ class Keyclock:
             print("Access Token 2: ", data["access_token"])
             return data["access_token"]
 
-    def get_user(self, user_id: str) -> dict[Any, Any]:
-        url = f"{self.url}/realms/{self.realm}/users/{user_id}"
+    async def get_user(self, user_id: str) -> KeyclockUser:
+        url = f"{self.url}/admin/realms/{self.realm}/users/{user_id}"
 
-        return httpx.get(
-            url, headers={"Authorization": f"Bearer {self.service_access_token}"}
-        ).json()
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                url, headers={"Authorization": f"Bearer {await self.service_access_token}"}
+            )
+
+        print("Url", url)
+        print("Status Code: ", res.status_code)
+        print("Error message:", res.json())
+        # print("Service Access Token: ", await self.service_access_token)
+
+        if res.status_code == 200:
+            user_dict = res.json()
+            try:
+                user = KeyclockUser.model_validate(user_dict)
+                return user
+            except ValidationError as e:
+                raise KeyclockApiException(
+                    "User validation error", e.errors(), user_dict
+                )
+        else:
+            raise KeyclockApiException("User not found", res.json())

@@ -55,14 +55,10 @@ def get_user(authorization: str, session: Session) -> User:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
     # get or create the user
-    user = session.exec(
-        select(User).where(User.username == payload["preferred_username"])
-    ).first()
+    user = session.exec(select(User).where(User.keyclock_id == payload["sub"])).first()
 
     if user is None:
         user = User(
-            id=payload["sub"],
-            username=payload["preferred_username"],
             keyclock_id=payload["sub"],
         )
         session.add(user)

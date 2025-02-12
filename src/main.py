@@ -91,7 +91,9 @@ def create_room(
                 status_code=400, detail="Private room must have exactly one participant"
             )
     try:
-        db_room: Room = Room(**room.model_dump(), owner=user)
+        room_dict = room.model_dump()
+        participants = room_dict.pop("participants")
+        db_room: Room = Room(**room_dict, owner=user)
         session.add(db_room)
         session.commit()
         session.refresh(db_room)

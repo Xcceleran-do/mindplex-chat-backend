@@ -1,8 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Annotated, Optional
 from pydantic import BaseModel
+from socketio.pubsub_manager import uuid
 from sqlmodel import Relationship, Field, SQLModel, Session, create_engine, select
+from .api import Keyclock, KeyclockApiException
 import secrets
 
 
@@ -21,6 +23,10 @@ class RoomValidationException(Exception):
 
 
 class RoomNotFoundException(Exception):
+    pass
+
+
+class UserNotFoundException(Exception):
     pass
 
 
@@ -43,9 +49,7 @@ class RoomMessagesLink(SQLModel, table=True):
 
 class User(SQLModel, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
-    username: str = Field(default="", max_length=50, unique=True)
-    mindplex_id: str | None = Field(default=None)
-    keyclock_id: str | None = Field(default=None)
+    keyclock_id: str = Field(unique=True)
 
     rooms: list["Room"] = Relationship(
         back_populates="participants", link_model=RoomParticipantLink
@@ -58,6 +62,39 @@ class User(SQLModel, table=True):
     def all_rooms(self) -> list["Room"]:
         """Returns a list of rooms where the user is either a participant or the owner"""
         return self.rooms + self.owned_rooms
+
+    @classmethod
+    def from_keyclock_or_db(cls, keyclock_id, session: Session) -> "User":
+        """gets a user from keyclock or the local database respectively
+
+        Args:
+            keyclock_id (str): the keycloak id
+            session (Session): the session to use
+
+        Returns:
+            User: the user
+
+        Raises:
+            UserNotFoundException: if the user is not found in both keyclock and local
+            db
+        """
+
+        user = session.exec(select(User).where(User.keyclock_id == keyclock_id)).first()
+
+        if user is not None:
+            return user
+
+        # get user from keycloack
+        kc_api = Keyclock()
+        try:
+            keyclock_user = kc_api.get_user(keyclock_id)
+            user = User(keyclock_id=str(keyclock_user.id))
+            return user
+        except KeyclockApiException:
+            # TODO: log error
+            raise UserNotFoundException(
+                f"User with keyclock id {keyclock_id} not found"
+            )
 
 
 class RoomBase(SQLModel):
@@ -89,7 +126,7 @@ class Room(RoomBase, table=True):
         if await self.is_in_room(participant):
             raise RoomValidationException("Participant is already in the room")
 
-        if self.room_type == RoomType.PRIVATE and len(self.participants) == 2:
+        if self.room_type == RoomType.PRIVATE and len(self.participants) == 1:
             raise RoomValidationException("Room is private")
 
         self.participants.append(participant)
@@ -107,7 +144,7 @@ class Room(RoomBase, table=True):
         Returns:
             Message: the message that is added
         """
-        if message.owner and not self.is_in_room(message.owner):
+        if not await self.is_in_room(message.owner):
             raise RoomValidationException("User is not in the room")
 
         self.messages.append(message)
@@ -136,9 +173,7 @@ class Room(RoomBase, table=True):
 
 
 class RoomCreate(RoomBase):
-    participants: list[User] = Relationship(
-        back_populates="rooms", link_model=RoomParticipantLink
-    )
+    participants: list[str] = Field(default=[])
 
 
 class Message(SQLModel, table=True):
