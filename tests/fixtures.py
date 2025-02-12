@@ -101,12 +101,15 @@ def rooms_with_keyclock_users_fixture(
     assert user1.id and user2.id
     room = Room(owner_id=user1.id)
     room2 = Room(room_type=RoomType.PRIVATE, owner_id=user2.id, participants=[user1])
+    room3 = Room(room_type=RoomType.PRIVATE, owner_id=user2.id)
     session.add(room)
+    session.add(room2)
+    session.add(room3)
     session.add(user1)
     session.add(user2)
     session.commit()
 
-    return [room, room2]
+    return [room, room2, room3]
 
 
 @pytest.fixture(name="messages")

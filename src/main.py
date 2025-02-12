@@ -100,10 +100,7 @@ async def create_room(
             try:
                 user = await User.from_keyclock_or_db(participant, session)
             except UserNotFoundException:
-                raise HTTPException(
-                    status_code=400, detail="Participant not found"
-                )
-
+                raise HTTPException(status_code=400, detail="Participant not found")
 
         db_room: Room = Room(**room_dict, owner=user)
         session.add(db_room)
@@ -126,7 +123,7 @@ async def get_room(
         assert room
     except RoomNotFoundException:
         raise HTTPException(status_code=404, detail="Room not found")
-    except AssertionError: # Just in case
+    except AssertionError:  # Just in case
         raise HTTPException(status_code=404, detail="Room not found")
 
     if not await room.is_in_room(user):
@@ -145,7 +142,7 @@ async def get_room_messages(
     user: Annotated[User, Depends(get_user_dep)],
 ):
 
-    room = await Room.get_by_id(room_id, session, raise_exc=True)
+    room = await Room.get_by_id(room_id, session, raise_exc=False)
 
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")

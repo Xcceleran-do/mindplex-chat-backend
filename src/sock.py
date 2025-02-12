@@ -19,6 +19,13 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, room_id: str):
         await websocket.accept()
+        await websocket.send_json(
+            WSResponse(
+                success=True,
+                message=WSMessage(type=WSMessageType.TEXT, message="Connected to room"),
+            ).model_dump(exclude_none=True)
+        )
+
         if room_id not in self.active_connections:
             self.active_connections[room_id] = []
         self.active_connections[room_id].append(websocket)
@@ -57,10 +64,11 @@ class WSError(BaseModel):
     short_code: str
     details: str | dict
 
+
 class WSResponse(BaseModel):
     success: bool
     error: Optional[WSError] = None
-    message: Optional[str] = None
+    message: Optional[WSMessage] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -85,7 +93,6 @@ async def websocket_endpoint(
     user_or_err: User | str = Depends(get_user_from_qp_dep),
 ):
 
-    # check if user is authorized
     if type(user_or_err) is str:
         await websocket.accept()
         response = WSResponse(
@@ -136,7 +143,10 @@ async def websocket_endpoint(
         while True:
             message_text = await websocket.receive_json()
             try:
-                data = WSMessage(**message_text)
+                data = WSResponse(
+                    success=True,
+                    message=WSMessage(type=WSMessageType.TEXT, message=message_text),
+                )
             except ValidationError as ve:
                 response = WSResponse(
                     success=False,
@@ -148,7 +158,9 @@ async def websocket_endpoint(
                 )
                 await websocket.send_json(response.model_dump(exclude_none=True))
                 continue
-            message = Message(owner=user, text=data.message)
+
+            assert data.message
+            message = Message(owner=user, text=data.message.message)
             await room.add_message(message)
             session.add(message)
             session.commit()

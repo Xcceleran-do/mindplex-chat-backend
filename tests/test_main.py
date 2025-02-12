@@ -158,4 +158,70 @@ class TestGetRoom:
 
 
 class TestGetRoomMessages:
-    pass
+    def test_auth(self, token: str, client: TestClient, rooms: list[Room]):
+        response = client.get(
+            f"/rooms/{rooms[0].id}/message",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code != 401
+
+    def test_no_auth(self, client: TestClient, rooms: list[Room]):
+        response = client.get(
+            f"/rooms/{rooms[0].id}/message", headers={"Authorization": ""}
+        )
+        assert response.status_code == 401
+
+    def test_non_existing_room(self, token: str, client: TestClient):
+        response = client.get(
+            f"/rooms/invalid_room_id/message",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 404
+
+    def test_existing_room_with_no_access(
+        self,
+        token: str,
+        client: TestClient,
+        rooms: list[Room],
+        keyclock_users: dict[str, KeyclockUser],
+    ):
+        response = client.get(
+            f"/rooms/{rooms[0].id}/message",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403
+
+    def test_existing_room_with_ownership_access(
+        self,
+        token: str,
+        session: Session,
+        client: TestClient,
+        rooms_with_keyclock: list[Room],
+        keyclock_users: dict[str, KeyclockUser],
+    ):
+        response = client.get(
+            f"/rooms/{rooms_with_keyclock[0].id}/message",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        data = response.json()
+
+        assert response.status_code == 200
+        assert data == []
+
+    def test_existing_room_with_participatory_access(
+        self,
+        token: str,
+        session: Session,
+        client: TestClient,
+        rooms_with_keyclock: list[Room],
+        keyclock_users: dict[str, KeyclockUser],
+    ):
+
+        response = client.get(
+            f"/rooms/{rooms_with_keyclock[1].id}/message",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        data = response.json()
+
+        assert response.status_code == 200
+        assert data == []
