@@ -17,6 +17,7 @@ from .dependencies import get_session, get_user_dep, get_user, get_user_from_qp_
 from . import sock
 from .models import (
     RoomCreate,
+    RoomNotFoundException,
     RoomParticipantLink,
     RoomType,
     User,
@@ -120,7 +121,20 @@ async def get_room(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
-    room = await Room.get_by_id(room_id, session, raise_exc=True)
+    try:
+        room = await Room.get_by_id(room_id, session, raise_exc=True)
+        assert room
+    except RoomNotFoundException:
+        raise HTTPException(status_code=404, detail="Room not found")
+    except AssertionError: # Just in case
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    if not await room.is_in_room(user):
+        raise HTTPException(
+            status_code=403, detail="User does not have access to this room"
+        )
+
+    assert room is not None
     return room
 
 

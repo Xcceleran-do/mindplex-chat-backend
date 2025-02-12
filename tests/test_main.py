@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from sqlmodel import select
 
 from src.models import User
 from .fixtures import *
@@ -54,7 +55,6 @@ class TestCreateRoom:
                 "participants": [str(keyclock_users["dave"].id)],
             },
         )
-        print("Response data", response.json())
         assert response.status_code == 200
 
     def test_private_with_no_participants(self, token: str, client: TestClient):
@@ -79,4 +79,83 @@ class TestCreateRoom:
                 ],
             },
         )
+
         assert response.status_code == 400
+
+
+class TestGetRoom:
+    def test_auth(self, token: str, client: TestClient, rooms: list[Room]):
+        response = client.get(
+            f"/rooms/{rooms[0].id}", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code != 401
+
+    def test_no_auth(self, client: TestClient, rooms: list[Room]):
+        response = client.get(f"/rooms/{rooms[0].id}", headers={"Authorization": ""})
+        assert response.status_code == 401
+
+    def test_non_existing_room(self, token: str, client: TestClient):
+        response = client.get(
+            f"/rooms/invalid_room_id", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 404
+
+    def test_existing_room_with_no_participation_or_ownership(
+        self, token: str, client: TestClient, rooms: list[Room]
+    ):
+        response = client.get(
+            f"/rooms/{rooms[0].id}", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403
+
+    def test_existing_room_with_ownership(
+        self,
+        token: str,
+        session: Session,
+        client: TestClient,
+        rooms_with_keyclock: list[Room],
+        keyclock_users: dict[str, KeyclockUser],
+    ):
+        response = client.get(
+            f"/rooms/{rooms_with_keyclock[0].id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        data = response.json()
+
+        assert response.status_code == 200
+        assert data["id"] == rooms_with_keyclock[0].id
+        # assert data["owner_id"] == str(keyclock_users["dave"].id)
+
+        owner_user = session.exec(
+            select(User).where(User.id == data["owner_id"])
+        ).first()
+        assert owner_user
+
+        assert owner_user.keyclock_id == str(keyclock_users["dave"].id)
+
+    def test_existing_room_with_participation(
+        self,
+        token: str,
+        session: Session,
+        client: TestClient,
+        rooms_with_keyclock: list[Room],
+        keyclock_users: dict[str, KeyclockUser],
+    ):
+        response = client.get(
+            f"/rooms/{rooms_with_keyclock[1].id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        data = response.json()
+        assert response.status_code == 200
+        assert data["id"] == rooms_with_keyclock[1].id
+
+        non_owner_user = session.exec(
+            select(User).where(User.id == data["owner_id"])
+        ).first()
+        assert non_owner_user
+
+        assert non_owner_user.keyclock_id != str(keyclock_users["dave"].id)
+
+
+class TestGetRoomMessages:
+    pass

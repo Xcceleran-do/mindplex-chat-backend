@@ -53,6 +53,7 @@ def users_fixture(session: Session):
 
     return [user, user1, user2]
 
+
 @pytest.fixture(name="keyclock_users")
 def keyclock_users_fixture():
     return {
@@ -65,9 +66,18 @@ def keyclock_users_fixture():
                 "email": "dave",
                 "createdTimestamp": int(datetime.now().timestamp()),
             }
-        )
+        ),
+        "ivan": KeyclockUser(
+            **{
+                "id": "35f251ef-c8f4-4f30-a9f9-45fd545b9fb2",
+                "username": "ivan",
+                "firstName": "ivan",
+                "lastName": "me",
+                "email": "asd@asd.c",
+                "createdTimestamp": 1737529663038,
+            }
+        ),
     }
-
 
 
 @pytest.fixture(name="rooms")
@@ -80,6 +90,23 @@ def rooms_fixture(session: Session, users: list[User]):
     session.commit()
 
     return [room, room1]
+
+
+@pytest.fixture(name="rooms_with_keyclock")
+def rooms_with_keyclock_users_fixture(
+    session: Session, keyclock_users: dict[str, KeyclockUser]
+):
+    user1 = User(keyclock_id=str(keyclock_users["dave"].id))
+    user2 = User(keyclock_id=str(keyclock_users["ivan"].id))
+    assert user1.id and user2.id
+    room = Room(owner_id=user1.id)
+    room2 = Room(room_type=RoomType.PRIVATE, owner_id=user2.id, participants=[user1])
+    session.add(room)
+    session.add(user1)
+    session.add(user2)
+    session.commit()
+
+    return [room, room2]
 
 
 @pytest.fixture(name="messages")
@@ -132,4 +159,3 @@ def user_token_fixture(users: list[User]):
     response = httpx.post(url, headers=headers, data=payload)
 
     return response.json()["access_token"]
-

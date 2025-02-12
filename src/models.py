@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Annotated, Optional
 from pydantic import BaseModel
 from socketio.pubsub_manager import uuid
-from sqlmodel import Relationship, Field, SQLModel, Session, create_engine, select
+from sqlmodel import Relationship, Field, SQLModel, Session, UniqueConstraint, create_engine, select
 from .api import Keyclock, KeyclockApiException
 import secrets
 
@@ -58,6 +58,8 @@ class User(SQLModel, table=True):
         back_populates="owner",
     )
     messages: list["Message"] = Relationship(back_populates="owner")
+
+    _table_args__ = (UniqueConstraint("id", "keyclock_id"),)
 
     def all_rooms(self) -> list["Room"]:
         """Returns a list of rooms where the user is either a participant or the owner"""
@@ -166,6 +168,21 @@ class Room(RoomBase, table=True):
     async def get_by_id(
         cls, room_id: str, session: Session, raise_exc: bool = True
     ) -> Optional["Room"]:
+        """Gets a room by id
+
+        Args:
+            room_id (str): the id of the room
+            session (Session): the session to use
+            raise_exc (bool, optional): whether to raise an exception if the room \
+            is not found. Defaults to True.
+
+        Raises:
+            RoomNotFoundException: if the room is not found and raise_exc is True
+
+        Returns:
+            Room: the room
+            None: if the room is not found and raise_exc is False
+        """
         room = session.exec(select(cls).where(cls.id == room_id)).first()
         if room is None and raise_exc:
             raise RoomNotFoundException("Room not found")
