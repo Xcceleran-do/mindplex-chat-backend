@@ -13,7 +13,6 @@ class TestCreateRoom:
             headers={"Authorization": f"Bearer {token}"},
             json={"room_type": "universal"},
         )
-        print("Headers: ", response.request.headers)
         assert response.status_code == 200
 
     def test_no_auth(self, client: TestClient):
@@ -32,7 +31,9 @@ class TestCreateRoom:
         assert data["owner_id"]
         assert response.status_code == 200
 
-    def test_private(self, token: str, client: TestClient, users: list[User]):
+    def test_private(
+        self, token: str, client: TestClient, keyclock_users: dict[str, KeyclockUser]
+    ):
         # With no participants
         response = client.post(
             "/rooms",
@@ -48,6 +49,34 @@ class TestCreateRoom:
         response = client.post(
             "/rooms",
             headers={"Authorization": f"Bearer {token}"},
-            json={"room_type": "private", "participants": [users[1].id]},
+            json={
+                "room_type": "private",
+                "participants": [str(keyclock_users["dave"].id)],
+            },
         )
+        print("Response data", response.json())
         assert response.status_code == 200
+
+    def test_private_with_no_participants(self, token: str, client: TestClient):
+        response = client.post(
+            "/rooms",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"room_type": "private", "participants": []},
+        )
+        assert response.status_code == 400
+
+    def test_private_with_multiple_participants(
+        self, token: str, client: TestClient, keyclock_users: dict[str, KeyclockUser]
+    ):
+        response = client.post(
+            "/rooms",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "room_type": "private",
+                "participants": [
+                    str(keyclock_users["dave"].id),
+                    str(keyclock_users["dave"].id),
+                ],
+            },
+        )
+        assert response.status_code == 400

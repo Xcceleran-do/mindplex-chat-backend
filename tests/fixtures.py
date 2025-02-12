@@ -1,6 +1,7 @@
+from datetime import datetime
 import uuid
 import pytest
-from src.api import Keyclock
+from src.api import Keyclock, KeyclockUser
 from src.models import RoomType, SQLModel, Room, User, Message, engine
 from sqlmodel import create_engine, Session
 from src.main import app
@@ -51,6 +52,22 @@ def users_fixture(session: Session):
     session.commit()
 
     return [user, user1, user2]
+
+@pytest.fixture(name="keyclock_users")
+def keyclock_users_fixture():
+    return {
+        "dave": KeyclockUser(
+            **{
+                "id": uuid.UUID("d11ddcca-4164-4078-b714-c8e8a37b3b22"),
+                "username": "dave",
+                "firstName": "dave",
+                "lastName": "dave",
+                "email": "dave",
+                "createdTimestamp": int(datetime.now().timestamp()),
+            }
+        )
+    }
+
 
 
 @pytest.fixture(name="rooms")

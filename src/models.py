@@ -64,7 +64,7 @@ class User(SQLModel, table=True):
         return self.rooms + self.owned_rooms
 
     @classmethod
-    def from_keyclock_or_db(cls, keyclock_id, session: Session) -> "User":
+    async def from_keyclock_or_db(cls, keyclock_id, session: Session) -> "User":
         """gets a user from keyclock or the local database respectively
 
         Args:
@@ -87,7 +87,7 @@ class User(SQLModel, table=True):
         # get user from keycloack
         kc_api = Keyclock()
         try:
-            keyclock_user = kc_api.get_user(keyclock_id)
+            keyclock_user = await kc_api.get_user(keyclock_id)
             user = User(keyclock_id=str(keyclock_user.id))
             return user
         except KeyclockApiException:

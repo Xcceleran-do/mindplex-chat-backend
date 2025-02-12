@@ -7,6 +7,7 @@ import pytest
 import logging
 import os
 import dotenv
+from .fixtures import *
 
 dotenv.load_dotenv()
 
@@ -24,21 +25,6 @@ bwIDAQAB
 -----END PUBLIC KEY-----
 """
 
-
-@pytest.fixture(name="keyclock_users")
-def keyclock_users():
-    return {
-        "dave": KeyclockUser(
-            **{
-                "id": uuid.UUID("d11ddcca-4164-4078-b714-c8e8a37b3b22"),
-                "username": "dave",
-                "firstName": "dave",
-                "lastName": "dave",
-                "email": "dave",
-                "createdTimestamp": int(datetime.now().timestamp()),
-            }
-        )
-    }
 
 
 class TestKeyClock:

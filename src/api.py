@@ -45,7 +45,6 @@ class Keyclock:
 
         if self._service_access_token:
             if self._service_access_token["expires_in_dt"] > datetime.now():
-                print("Access Token 1: ", self._service_access_token["access_token"])
                 return self._service_access_token["access_token"]
 
         async with httpx.AsyncClient() as client:
@@ -58,7 +57,6 @@ class Keyclock:
             self._service_access_token["expires_in_dt"] = datetime.now() + timedelta(
                 seconds=data["expires_in"]
             )
-            print("Access Token 2: ", data["access_token"])
             return data["access_token"]
 
     async def get_user(self, user_id: str) -> KeyclockUser:
@@ -68,11 +66,6 @@ class Keyclock:
             res = await client.get(
                 url, headers={"Authorization": f"Bearer {await self.service_access_token}"}
             )
-
-        print("Url", url)
-        print("Status Code: ", res.status_code)
-        print("Error message:", res.json())
-        # print("Service Access Token: ", await self.service_access_token)
 
         if res.status_code == 200:
             user_dict = res.json()
@@ -85,3 +78,4 @@ class Keyclock:
                 )
         else:
             raise KeyclockApiException("User not found", res.json())
+

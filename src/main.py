@@ -23,6 +23,7 @@ from .models import (
     Room,
     Message,
     SQLModel,
+    UserNotFoundException,
     engine,
 )
 
@@ -79,20 +80,30 @@ def get_rooms(
 
 # Endpoint to create a room (private or universal)
 @app.post("/rooms/", response_model=Room)
-def create_room(
+async def create_room(
     room: RoomCreate,
     user: Annotated[User, Depends(get_user_dep)],
     session: Annotated[Session, Depends(get_session)],
 ):
 
     if room.room_type == RoomType.PRIVATE:
-        if len(room.participants) == 0:
+        if len(room.participants) == 0 or len(room.participants) > 1:
             raise HTTPException(
                 status_code=400, detail="Private room must have exactly one participant"
             )
     try:
         room_dict = room.model_dump()
         participants = room_dict.pop("participants")
+
+        for participant in participants:
+            try:
+                user = await User.from_keyclock_or_db(participant, session)
+            except UserNotFoundException:
+                raise HTTPException(
+                    status_code=400, detail="Participant not found"
+                )
+
+
         db_room: Room = Room(**room_dict, owner=user)
         session.add(db_room)
         session.commit()
