@@ -18,10 +18,10 @@
 
 	const BACKEND_HOST = "localhost:8000"
 
-	const room_id = "c1b11042b228dd98"
+	const room_id = "7c3d7930c128cdb4"
 
 	let messages: HTMLDivElement
-	let value: string
+
 	let inp: HTMLInputElement
 
 
@@ -62,11 +62,15 @@
 	const ws: WebSocket =  create_socket()
 
 	function sendMessage() {
+		const value = (inp as HTMLInputElement).value
+		console.log(value)
 		if (value?.trim() !== "") {
 			let msg = {
 				type: "text",
-				content: value
+				message: value,
+				sender: null
 			}
+			console.log("Ws: ", ws)
 			ws.send(JSON.stringify(msg));
 			const sentMessage = document.createElement("p");
 			sentMessage.textContent = "Sent: " + value;

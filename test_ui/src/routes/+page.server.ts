@@ -10,8 +10,8 @@ const test_users = [
 ]
 
 
-async function auth_user(count = 1) {
-	const user = test_users[count - 1]
+async function auth_user(count = 0) {
+	const user = test_users[count]
 
 	if (user === undefined) {
 		throw new Error("No test user found")
@@ -23,8 +23,8 @@ async function auth_user(count = 1) {
 
 	const urlencoded = new URLSearchParams();
 	urlencoded.append("client_id", "mindplex");
-	urlencoded.append("username", "dave");
-	urlencoded.append("password", "dave");
+	urlencoded.append("username", user.username);
+	urlencoded.append("password", user.password);
 	urlencoded.append("grant_type", "password");
 	urlencoded.append("client_secret", "Dzkhw0zTnV6wgQ59Lsnqm5JaG4CreCAf");
 	urlencoded.append("scope", "openid");
@@ -39,8 +39,10 @@ async function auth_user(count = 1) {
 
 	const res = await fetch(`https://${AUTH_BACKEND_HOST}/realms/Mindplex/protocol/openid-connect/token`, requestOptions)
 
+	const r = await res.json()
+	console.log("Res: ", r)
 
-	return (await res.json()).access_token as string
+	return (r).access_token as string
 
 }
 
