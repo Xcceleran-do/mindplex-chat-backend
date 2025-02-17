@@ -5,6 +5,10 @@ from .fixtures import *
 import pytest
 
 
+class TestConnectionManager:
+    pass
+
+
 class TestWebSocketEndpoint:
     def test_no_auth(self, client: TestClient, rooms_with_keyclock: list[Room]):
         endpoint = f"/ws/rooms/{rooms_with_keyclock[0].id}?token=invalid_token"
@@ -48,6 +52,44 @@ class TestWebSocketEndpoint:
             assert response["message"]["type"] == "text"
             assert response["message"]["message"] == "Connected to room"
 
-
+    # @pytest.mark.asyncio
+    # async def test_message_send(
+    #     self,
+    #     token: str,
+    #     tony_token,
+    #     client: TestClient,
+    #     rooms_with_keyclock: list[Room],
+    # ):
+    #     endpoint1 = f"/ws/rooms/{rooms_with_keyclock[0].id}?token={token}"
+    #     endpoint2 = f"/ws/rooms/{rooms_with_keyclock[0].id}?token={token}"
+    #     print("Room ID", rooms_with_keyclock[0].id)
+    #
+    #     with client.websocket_connect(endpoint1) as ws1:
+    #         with client.websocket_connect(endpoint2) as ws2:
+    #             response = ws1.receive_json()
+    #             assert response["success"] == True
+    #             assert response["message"]["type"] == "text"
+    #             assert response["message"]["message"] == "Connected to room"
+    #
+    #             response = ws2.receive_json()
+    #             assert response["success"] == True
+    #             assert response["message"]["type"] == "text"
+    #             assert response["message"]["message"] == "Connected to room"
+    #
+    #             ws1.send_json(
+    #                 {
+    #                     "type": "text",
+    #                     "message": "test message",
+    #                     "sender": None,
+    #                 }
+    #             )
+    #             print("message sent")
+    #
+    #             response = ws2.receive_json()
+    #             print("message received")
+    #             assert response["success"] == True
+    #             assert response["message"]["type"] == "text"
+    #             assert response["message"]["message"] == "test message"
+    #
 
 
