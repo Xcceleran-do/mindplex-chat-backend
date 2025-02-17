@@ -18,22 +18,29 @@ class ConnectionManager:
         self.active_connections: dict[str, list[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, room_id: str):
+        """Connect websocket to room"""
         await websocket.accept()
         await websocket.send_json(
             WSResponse(
                 success=True,
-                message=WSMessage(type=WSMessageType.TEXT, message="Connected to room"),
+                message=WSMessage(
+                    type=WSMessageType.TEXT, message="Connected to room", sender=None
+                ),
             ).model_dump(exclude_none=True)
         )
 
         if room_id not in self.active_connections:
             self.active_connections[room_id] = []
+
         self.active_connections[room_id].append(websocket)
+        print("New Connection: ", self.active_connections)
 
     async def disconnect(self, websocket: WebSocket, room_id: str):
         self.active_connections[room_id].remove(websocket)
 
-    async def send_message(self, message: str, room_id: str, websocket: WebSocket):
+    async def send_message(
+        self, message: "WSMessage", room_id: str, websocket: WebSocket
+    ):
         """
         Send a message to a specific room excluding the sender.
 
@@ -42,9 +49,11 @@ class ConnectionManager:
             room_id (str): the room to send the message to
             websocket (WebSocket): the websocket to exclude
         """
+
+        # raise Exception("Connections: ", self.active_connections)
         for connection in self.active_connections[room_id]:
             if connection != websocket:
-                await connection.send_text(message)
+                await connection.send_json(message.model_dump(exclude_none=True))
 
 
 class WSMessageType(str, Enum):
@@ -54,6 +63,7 @@ class WSMessageType(str, Enum):
 class WSMessage(BaseModel):
     type: WSMessageType
     message: str
+    sender: Optional[User]
 
     class Config:
         arbitrary_types_allowed = True
@@ -92,6 +102,7 @@ async def websocket_endpoint(
     session: Session = Depends(get_session),
     user_or_err: User | str = Depends(get_user_from_qp_dep),
 ):
+    print("I was at least here :)")
 
     if type(user_or_err) is str:
         await websocket.accept()
@@ -141,32 +152,34 @@ async def websocket_endpoint(
     await connections.connect(websocket, room.id)
     try:
         while True:
-            message_text = await websocket.receive_json()
+            message_json = await websocket.receive_json()
             try:
-                data = WSResponse(
-                    success=True,
-                    message=WSMessage(type=WSMessageType.TEXT, message=message_text),
-                )
+                data = WSMessage(**message_json)
             except ValidationError as ve:
+                print(ve.json())
                 response = WSResponse(
                     success=False,
                     error=WSError(
                         status_code=400,
                         short_code="validation_error",
-                        details=json.loads(ve.json()),
+                        details=ve.json(),
                     ),
                 )
                 await websocket.send_json(response.model_dump(exclude_none=True))
                 continue
 
             assert data.message
-            message = Message(owner=user, text=data.message.message)
+            message = Message(owner=user, text=data.message)
             await room.add_message(message)
             session.add(message)
             session.commit()
             session.refresh(message)
 
-            await connections.send_message(message_text, room.id, websocket)
+            await connections.send_message(data, room.id, websocket)
 
     except WebSocketDisconnect:
+        print("A user has disconnected: ", websocket)
         await connections.disconnect(websocket, room.id)
+
+
+

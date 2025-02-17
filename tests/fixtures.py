@@ -138,7 +138,7 @@ def message_fixture(session: Session, users: list[User], rooms: list[Room]):
 
 
 @pytest.fixture(name="token")
-def user_token_fixture(users: list[User]):
+def user_token_fixture():
 
     url = (
         "https://stagingauth.mindplex.ai/realms/Mindplex/protocol/openid-connect/token"
@@ -148,6 +148,33 @@ def user_token_fixture(users: list[User]):
         "client_id": "mindplex",
         "username": "dave",
         "password": "dave",
+        "grant_type": "password",
+        "client_secret": "Dzkhw0zTnV6wgQ59Lsnqm5JaG4CreCAf",
+        "scope": "openid",
+    }
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Cookie": "AWSALBAPP-0=_remove_; AWSALBAPP-1=_remove_; AWSALBAPP-2=_remove_; AWSALBAPP-3=_remove_",
+    }
+
+    # Send the request
+    response = httpx.post(url, headers=headers, data=payload)
+
+    return response.json()["access_token"]
+
+
+@pytest.fixture(name="tony_token")
+def tony_token_fixture():
+
+    url = (
+        "https://stagingauth.mindplex.ai/realms/Mindplex/protocol/openid-connect/token"
+    )
+
+    payload = {
+        "client_id": "mindplex",
+        "username": "tony",
+        "password": "tony",
         "grant_type": "password",
         "client_secret": "Dzkhw0zTnV6wgQ59Lsnqm5JaG4CreCAf",
         "scope": "openid",

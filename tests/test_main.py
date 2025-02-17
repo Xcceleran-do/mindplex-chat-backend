@@ -55,6 +55,7 @@ class TestCreateRoom:
                 "participants": [str(keyclock_users["dave"].id)],
             },
         )
+
         assert response.status_code == 200
 
     def test_private_with_no_participants(self, token: str, client: TestClient):

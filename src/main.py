@@ -4,8 +4,6 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Depends,
-    WebSocket,
-    WebSocketDisconnect,
 )
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
@@ -133,7 +131,6 @@ async def get_room(
 
     assert room is not None
     return room
-
 
 @app.get("/rooms/{room_id}/message", response_model=list[Message])
 async def get_room_messages(
