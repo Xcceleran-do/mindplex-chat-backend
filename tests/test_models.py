@@ -83,7 +83,7 @@ class TestRoom:
         exc_info = None
         with pytest.raises(RoomValidationException) as e:
             exc_info = e
-            await rooms[0].add_message(messages.get("1", [])[0])
+            await rooms[1].add_message(messages.get("2", [])[0])
             session.commit()
 
         assert exc_info
