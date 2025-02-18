@@ -7,7 +7,6 @@ from fastapi import (
 )
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
-import socketio
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, or_, select
 import dotenv

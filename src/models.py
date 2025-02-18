@@ -2,7 +2,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Optional
 from pydantic import BaseModel
-from socketio.pubsub_manager import uuid
 from sqlmodel import (
     Relationship,
     Field,

@@ -45,10 +45,10 @@ def get_user(authorization: str, session: Session) -> User:
         payload = jwt.decode(
             token,
             JWT_KEY,
-            algorithms=["RS256"],  # Ensure this matches the algorithm in the JWT header
+            algorithms=["RS256"],  
             options={
                 "verify_aud": False
-            },  # Disable audience verification for this example
+            },
         )
 
     except InvalidTokenError as e:

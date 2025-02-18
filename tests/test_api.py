@@ -1,7 +1,6 @@
 from datetime import datetime
 
 import jwt
-from socketio.pubsub_manager import uuid
 from src.api import Keyclock, KeyclockUser
 import pytest
 import logging
@@ -35,11 +34,12 @@ class TestKeyClock:
         sat_payload = jwt.decode(
             sat,
             JWT_KEY,
-            algorithms=["RS256"],  # Ensure this matches the algorithm in the JWT header
+            algorithms=["RS256"], 
             options={
                 "verify_aud": False
-            },  # Disable audience verification for this example
+            },
         )
+        print("sat_payload: ", sat_payload)
         assert sat_payload["sub"] == "b335b5da-fd26-4407-b0cf-98213406d909"
 
         # Run again to check if the token is cached
@@ -47,10 +47,10 @@ class TestKeyClock:
         sat2_payload = jwt.decode(
             sat2,
             JWT_KEY,
-            algorithms=["RS256"],  # Ensure this matches the algorithm in the JWT header
+            algorithms=["RS256"],
             options={
                 "verify_aud": False
-            },  # Disable audience verification for this example
+            },
         )
 
         assert sat2_payload["sub"] == "b335b5da-fd26-4407-b0cf-98213406d909"
