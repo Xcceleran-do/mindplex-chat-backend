@@ -33,7 +33,9 @@ dotenv.load_dotenv()
 async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
     yield
-    SQLModel.metadata.drop_all(engine)
+
+    if os.getenv("ENV", "") != "dev":
+        SQLModel.metadata.drop_all(engine)
 
 
 app = FastAPI(lifespan=lifespan)
