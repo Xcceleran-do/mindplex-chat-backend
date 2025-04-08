@@ -2,7 +2,7 @@ from fastapi import WebSocketDisconnect, WebSocketException
 from fastapi.testclient import TestClient
 from sqlalchemy.sql.compiler import exc
 from .fixtures import *
-import pytest
+
 
 
 class TestConnectionManager:
@@ -11,7 +11,7 @@ class TestConnectionManager:
 
 class TestWebSocketEndpoint:
     def test_no_auth(self, client: TestClient, rooms_with_mindplex: list[Room]):
-        endpoint = f"/ws/rooms/{rooms_with_mindplex[0].id}?token=invalid_token"
+        endpoint = f"/ws/rooms/{rooms_with_mindplex[0].id}?token=invalid_token&username=test_user"
         # check if the room exists
 
         with client.websocket_connect(endpoint) as websocket:
@@ -21,7 +21,7 @@ class TestWebSocketEndpoint:
             assert response["error"]["short_code"] == "unauthorized"
 
     def test_no_room(self, token: str, client: TestClient):
-        endpoint = f"/ws/rooms/invalid_room_id?token={token}"
+        endpoint = f"/ws/rooms/invalid_room_id?token={token}&username=dave"
         # check if the room exists
 
         with client.websocket_connect(endpoint) as websocket:
@@ -33,7 +33,7 @@ class TestWebSocketEndpoint:
     def test_with_room_not_member(
         self, token: str, client: TestClient, rooms_with_mindplex: list[Room]
     ):
-        endpoint = f"/ws/rooms/{rooms_with_mindplex[2].id}?token={token}"
+        endpoint = f"/ws/rooms/{rooms_with_mindplex[2].id}?token={token}&username=dave"
 
         with client.websocket_connect(endpoint) as websocket:
             response = websocket.receive_json()
@@ -44,7 +44,7 @@ class TestWebSocketEndpoint:
     def test_with_room_member(
         self, token: str, client: TestClient, rooms_with_mindplex: list[Room]
     ):
-        endpoint = f"/ws/rooms/{rooms_with_mindplex[1].id}?token={token}"
+        endpoint = f"/ws/rooms/{rooms_with_mindplex[1].id}?token={token}&username=dave"
 
         with client.websocket_connect(endpoint) as websocket:
             response = websocket.receive_json()

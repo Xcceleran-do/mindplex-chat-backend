@@ -33,7 +33,6 @@ class ConnectionManager:
             self.active_connections[room_id] = []
 
         self.active_connections[room_id].append(websocket)
-        print("New Connection: ", self.active_connections)
 
     async def disconnect(self, websocket: WebSocket, room_id: str):
         self.active_connections[room_id].remove(websocket)
@@ -154,7 +153,6 @@ async def websocket_endpoint(
             try:
                 data = WSMessage(**message_json)
             except ValidationError as ve:
-                print(ve.json())
                 response = WSResponse(
                     success=False,
                     error=WSError(

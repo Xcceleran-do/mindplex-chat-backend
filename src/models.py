@@ -153,8 +153,6 @@ class Room(RoomBase, table=True):
         Returns:
             Message: the message that is added
         """
-        print("Room type: ", self.room_type)
-        print("Is room type: ", self.room_type == RoomType.UNIVERSAL)
         if (
             not await self.is_in_room(message.owner)
             and not (self.room_type == RoomType.UNIVERSAL)

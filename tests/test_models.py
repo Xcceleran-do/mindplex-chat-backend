@@ -121,3 +121,7 @@ class TestRoom:
         assert await rooms[0].is_in_room(users[0])
         assert await rooms[0].is_in_room(users[1])
         assert await rooms[0].is_in_room(users[2])
+
+        assert not await rooms[1].is_in_room(users[0])
+        assert await rooms[1].is_in_room(users[1])
+

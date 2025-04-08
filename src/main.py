@@ -42,7 +42,6 @@ async def remove_expired_rooms():
                 stmt = delete(Room).where(Room.last_interacted<expiry_threshold)
                 result = session.exec(stmt)
                 session.commit()
-                print(f"Deleted {result.rowcount} expired rooms.")  # Logs the count of deleted rooms
 
             await asyncio.sleep(3)
         except KeyboardInterrupt as e:
@@ -146,10 +145,8 @@ async def get_room(
     except AssertionError:  # Just in case
         raise HTTPException(status_code=404, detail="Room not found")
 
-    print("is in room: ", await room.is_in_room(user))
-    print("user: ", user)
-    print("room: ", room) 
-    print("room participants: ", room.participants)
+    print(f"requested_user: {user}")
+
     if not await room.is_in_room(user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"

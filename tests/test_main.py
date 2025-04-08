@@ -15,7 +15,7 @@ class TestCreateRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient):
         response = client.post(
             "/rooms",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
             json={"room_type": "universal"},
         )
         assert response.status_code == 200
@@ -27,7 +27,7 @@ class TestCreateRoom:
     def test_universal(self, token: dict[str, Any], client: TestClient):
         response = client.post(
             "/rooms",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
             json={"room_type": "universal"},
         )
         data = response.json()
@@ -41,7 +41,7 @@ class TestCreateRoom:
     ):
         response = client.post(
             "/rooms",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
             json={"room_type": "private"},
         )
         data = response.json()
@@ -52,7 +52,7 @@ class TestCreateRoom:
         # with a single participant, not self
         response = client.post(
             "/rooms",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
             json={
                 "room_type": "private",
                 "participants": [str(mindplex_users["dave"].username)],
@@ -64,7 +64,7 @@ class TestCreateRoom:
     def test_private_with_no_participants(self, token: dict[str, Any], client: TestClient):
         response = client.post(
             "/rooms",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
             json={"room_type": "private", "participants": []},
         )
         assert response.status_code == 400
@@ -74,7 +74,7 @@ class TestCreateRoom:
     ):
         response = client.post(
             "/rooms",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
             json={
                 "room_type": "private",
                 "participants": [
@@ -90,17 +90,17 @@ class TestCreateRoom:
 class TestGetRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
         response = client.get(
-            f"/rooms/{rooms[0].id}", headers={"Authorization": f"Bearer {token['token']}"}
+            f"/rooms/{rooms[0].id}", headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"}
         )
         assert response.status_code != 401
 
     def test_no_auth(self, client: TestClient, rooms: list[Room]):
-        response = client.get(f"/rooms/{rooms[0].id}", headers={"Authorization": ""})
+        response = client.get(f"/rooms/{rooms[0].id}", headers={"Authorization": "", "X-Username": "test_user"})
         assert response.status_code == 401
 
     def test_non_existing_room(self, token: dict[str, Any], client: TestClient):
         response = client.get(
-            f"/rooms/invalid_room_id", headers={"Authorization": f"Bearer {token['token']}"}
+            f"/rooms/invalid_room_id", headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"}
         )
         assert response.status_code == 404
 
@@ -108,7 +108,7 @@ class TestGetRoom:
         self, token: dict[str, Any], client: TestClient, rooms: list[Room]
     ):
         response = client.get(
-            f"/rooms/{rooms[0].id}", headers={"Authorization": f"Bearer {token['token']}"}
+            f"/rooms/{rooms[0].id}", headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"}
         )
         assert response.status_code == 403
 
@@ -122,10 +122,11 @@ class TestGetRoom:
     ):
         response = client.get(
             f"/rooms/{rooms_with_mindplex[0].id}",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": mindplex_users["dave"].username},
         )
         data = response.json()
-        print("room: ", data)
+
+        print(f"to_be_requested_user: {rooms_with_mindplex[0].owner}")
 
         assert response.status_code == 200
         assert data["id"] == rooms_with_mindplex[0].id
@@ -148,7 +149,7 @@ class TestGetRoom:
     ):
         response = client.get(
             f"/rooms/{rooms_with_mindplex[1].id}",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": mindplex_users["dave"].username},
         )
         data = response.json()
         assert response.status_code == 200
@@ -166,20 +167,20 @@ class TestGetRoomMessages:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
         response = client.get(
             f"/rooms/{rooms[0].id}/message",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
         )
         assert response.status_code != 401
 
     def test_no_auth(self, client: TestClient, rooms: list[Room]):
         response = client.get(
-            f"/rooms/{rooms[0].id}/message", headers={"Authorization": ""}
+            f"/rooms/{rooms[0].id}/message", headers={"Authorization": "", "X-Username": "test_user"}
         )
         assert response.status_code == 401
 
     def test_non_existing_room(self, token: dict[str, Any], client: TestClient):
         response = client.get(
             f"/rooms/invalid_room_id/message",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
         )
         assert response.status_code == 404
 
@@ -191,7 +192,7 @@ class TestGetRoomMessages:
     ):
         response = client.get(
             f"/rooms/{rooms[0].id}/message",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
         )
         assert response.status_code == 403
 
@@ -205,7 +206,7 @@ class TestGetRoomMessages:
     ):
         response = client.get(
             f"/rooms/{rooms_with_mindplex[0].id}/message",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
         )
         data = response.json()
 
@@ -222,7 +223,7 @@ class TestGetRoomMessages:
 
         response = client.get(
             f"/rooms/{rooms_with_mindplex[1].id}/message",
-            headers={"Authorization": f"Bearer {token['token']}"},
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
         )
         data = response.json()
 

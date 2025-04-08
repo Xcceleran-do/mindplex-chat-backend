@@ -11,7 +11,7 @@ def get_session():
         yield session
 
 
-def get_user(authorization: str, session: Session) -> User:
+def get_user(authorization: str, session: Session, *args, **kwargs) -> User:
     """Given Authorization header as string, authenticates and returns the user.
     Creates the user if it doesn't exist.
 
@@ -45,15 +45,20 @@ def get_user(authorization: str, session: Session) -> User:
     except InvalidTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
-    username = payload["data"]["user"]["id"]
+    # remote_id = payload["data"]["user"]["id"]
+
+    # get remote_id(username) from header instead of the token
+    remote_id = kwargs.get("username")
+
+    if remote_id is None:
+        raise HTTPException(status_code=401, detail="Missing username header")
 
     # get or create the user
-    user = session.exec(select(User).where(User.remote_id == username)).first()
-    print("user from token: ", payload)
+    user = session.exec(select(User).where(User.remote_id == remote_id)).first()
 
     if user is None:
         user = User(
-            remote_id=username,
+            remote_id=remote_id,
         )
         session.add(user)
         session.commit()
@@ -65,15 +70,18 @@ def get_user(authorization: str, session: Session) -> User:
 async def get_user_dep(
     session: Annotated[Session, Depends(get_session)],
     authorization: Annotated[str, Header()],
+    x_username: Annotated[str, Header()]
 ) -> User:
-    return get_user(authorization, session)
+    return get_user(authorization, session, username=x_username)
 
 
 async def get_user_from_qp_dep(
-    session: Annotated[Session, Depends(get_session)], token: Annotated[str, Query()]
+    session: Annotated[Session, Depends(get_session)], token: Annotated[str, Query()], username: Annotated[str, Query()]
 ) -> User | str:
     try:
         authorization = f"Bearer {token}"
-        return get_user(authorization, session)
+        return get_user(authorization, session, username=username)
     except HTTPException as e:
         return str(e)
+
+
