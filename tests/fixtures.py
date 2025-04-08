@@ -1,12 +1,13 @@
 from datetime import datetime
 import uuid
 import pytest
-from src.api import Keyclock, KeyclockUser
+from src.api import Mindplex, MindplexUser
 from src.models import RoomType, SQLModel, Room, User, Message, engine
 from sqlmodel import create_engine, Session
 from src.main import app
 from fastapi.testclient import TestClient
 import httpx
+import pytest_asyncio
 
 
 @pytest.fixture
@@ -43,9 +44,9 @@ def client_fixture(engine):
 
 @pytest.fixture(name="users")
 def users_fixture(session: Session):
-    user = User(keyclock_id=str(uuid.uuid4()))
-    user1 = User(keyclock_id=str(uuid.uuid4()))
-    user2 = User(keyclock_id=str(uuid.uuid4()))
+    user = User(remote_id="dave")
+    user1 = User(remote_id="ivan2")
+    user2 = User(remote_id="tony")
     session.add(user)
     session.add(user1)
     session.add(user2)
@@ -54,27 +55,23 @@ def users_fixture(session: Session):
     return [user, user1, user2]
 
 
-@pytest.fixture(name="keyclock_users")
-def keyclock_users_fixture():
+@pytest.fixture(name="mindplex_users")
+def mindplex_users_fixture():
     return {
-        "dave": KeyclockUser(
+        "dave": MindplexUser(
             **{
-                "id": uuid.UUID("d11ddcca-4164-4078-b714-c8e8a37b3b22"),
                 "username": "dave",
-                "firstName": "dave",
-                "lastName": "dave",
-                "email": "dave",
-                "createdTimestamp": int(datetime.now().timestamp()),
+                "first_name": "dave",
+                "last_name": "dave",
+                "avatar_url": "https://secure.gravatar.com/avatar/5e9ebd86529dcac05164aacedf030ac7?s=96&d=mm&r=g",
             }
         ),
-        "ivan": KeyclockUser(
+        "ivan2": MindplexUser(
             **{
-                "id": "35f251ef-c8f4-4f30-a9f9-45fd545b9fb2",
-                "username": "ivan",
-                "firstName": "ivan",
-                "lastName": "me",
-                "email": "asd@asd.c",
-                "createdTimestamp": 1737529663038,
+                "username": "ivan2",
+                "first_name": "ivan",
+                "last_name": "ivan",
+                "avatar_url": "https://secure.gravatar.com/avatar/5e9ebd86529dcac05164aacedf030ac7?s=96&d=mm&r=g",
             }
         ),
     }
@@ -92,23 +89,25 @@ def rooms_fixture(session: Session, users: list[User]):
     return [room, room1]
 
 
-@pytest.fixture(name="rooms_with_keyclock")
-def rooms_with_keyclock_users_fixture(
-    session: Session, keyclock_users: dict[str, KeyclockUser]
+@pytest_asyncio.fixture(name="rooms_with_mindplex")
+async def rooms_with_mindplex_users_fixture(
+    session: Session, mindplex_users: dict[str, MindplexUser]
 ):
-    user1 = User(keyclock_id=str(keyclock_users["dave"].id))
-    user2 = User(keyclock_id=str(keyclock_users["ivan"].id))
+    mpx_sdk = Mindplex()
+    user1 = User(remote_id=await mpx_sdk.get_user_id(mindplex_users["dave"]))
+    user2 = User(remote_id=await mpx_sdk.get_user_id(mindplex_users["ivan2"]))
     assert user1.id and user2.id
     room = Room(owner_id=user1.id)
     room2 = Room(room_type=RoomType.PRIVATE, owner_id=user2.id, participants=[user1])
     room3 = Room(room_type=RoomType.PRIVATE, owner_id=user2.id)
+    session.add(user1)
+    session.add(user2)
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.add(user1)
-    session.add(user2)
     session.commit()
-
+    
+    
     return [room, room2, room3]
 
 
@@ -140,52 +139,32 @@ def message_fixture(session: Session, users: list[User], rooms: list[Room]):
 @pytest.fixture(name="token")
 def user_token_fixture():
 
-    url = (
-        "https://stagingauth.mindplex.ai/realms/Mindplex/protocol/openid-connect/token"
-    )
+    url = "https://staging.mindplex.ai/wp-json/auth/v1/token"
 
     payload = {
-        "client_id": "mindplex",
-        "username": "dave",
-        "password": "dave",
-        "grant_type": "password",
-        "client_secret": "Dzkhw0zTnV6wgQ59Lsnqm5JaG4CreCAf",
-        "scope": "openid",
-    }
-
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Cookie": "AWSALBAPP-0=_remove_; AWSALBAPP-1=_remove_; AWSALBAPP-2=_remove_; AWSALBAPP-3=_remove_",
+        "username":"dave",
+        "password":"iBD9xSztMP8C!WglcdzyH2bq",
+        "login_with":"email_password",
+        "login_from" : "Android"
     }
 
     # Send the request
-    response = httpx.post(url, headers=headers, data=payload)
+    response = httpx.post(url, data=payload)
 
-    return response.json()["access_token"]
+    return response.json()['token']
 
 
 @pytest.fixture(name="tony_token")
 def tony_token_fixture():
 
-    url = (
-        "https://stagingauth.mindplex.ai/realms/Mindplex/protocol/openid-connect/token"
-    )
+    url = "https://staging.mindplex.ai/wp-json/auth/v1/token"
 
     payload = {
-        "client_id": "mindplex",
-        "username": "tony",
-        "password": "tony",
-        "grant_type": "password",
-        "client_secret": "Dzkhw0zTnV6wgQ59Lsnqm5JaG4CreCAf",
-        "scope": "openid",
-    }
-
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Cookie": "AWSALBAPP-0=_remove_; AWSALBAPP-1=_remove_; AWSALBAPP-2=_remove_; AWSALBAPP-3=_remove_",
+        "username": "ivan",
+        "password": "ivan",
     }
 
     # Send the request
-    response = httpx.post(url, headers=headers, data=payload)
+    response = httpx.post(url, data=payload)
 
-    return response.json()["access_token"]
+    return response.json()

@@ -102,8 +102,6 @@ async def websocket_endpoint(
     session: Session = Depends(get_session),
     user_or_err: User | str = Depends(get_user_from_qp_dep),
 ):
-    print("I was at least here :)")
-
     if type(user_or_err) is str:
         await websocket.accept()
         response = WSResponse(

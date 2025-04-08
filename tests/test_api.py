@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import jwt
-from src.api import Keyclock, KeyclockUser
+from src.api import Mindplex, MindplexUser
 import pytest
 import logging
 import os
@@ -26,43 +26,12 @@ bwIDAQAB
 
 
 
-class TestKeyClock:
+class TestMindplex:
     @pytest.mark.asyncio
-    async def test_service_access_token(self):
-        keyclock = Keyclock()
-        sat = await keyclock.service_access_token
-        sat_payload = jwt.decode(
-            sat,
-            JWT_KEY,
-            algorithms=["RS256"], 
-            options={
-                "verify_aud": False
-            },
-        )
-        print("sat_payload: ", sat_payload)
-        assert sat_payload["sub"] == "b335b5da-fd26-4407-b0cf-98213406d909"
+    async def test_get_user(self, mindplex_users):
+        mpx = Mindplex()
+        user1: MindplexUser = mindplex_users["dave"]
 
-        # Run again to check if the token is cached
-        sat2 = await keyclock.service_access_token
-        sat2_payload = jwt.decode(
-            sat2,
-            JWT_KEY,
-            algorithms=["RS256"],
-            options={
-                "verify_aud": False
-            },
-        )
+        user_from_mpx: MindplexUser = await mpx.get_user("dave")
 
-        assert sat2_payload["sub"] == "b335b5da-fd26-4407-b0cf-98213406d909"
-        assert sat2_payload["exp"] == sat_payload["exp"]
-
-    @pytest.mark.asyncio
-    async def test_get_user(self, keyclock_users):
-        kc = Keyclock()
-        user1: KeyclockUser = keyclock_users["dave"]
-
-        user_from_kc: KeyclockUser = await kc.get_user(
-            "d11ddcca-4164-4078-b714-c8e8a37b3b22"
-        )
-
-        assert user_from_kc.id == user1.id
+        assert user_from_mpx.username == user1.username

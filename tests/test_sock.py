@@ -10,8 +10,8 @@ class TestConnectionManager:
 
 
 class TestWebSocketEndpoint:
-    def test_no_auth(self, client: TestClient, rooms_with_keyclock: list[Room]):
-        endpoint = f"/ws/rooms/{rooms_with_keyclock[0].id}?token=invalid_token"
+    def test_no_auth(self, client: TestClient, rooms_with_mindplex: list[Room]):
+        endpoint = f"/ws/rooms/{rooms_with_mindplex[0].id}?token=invalid_token"
         # check if the room exists
 
         with client.websocket_connect(endpoint) as websocket:
@@ -31,9 +31,9 @@ class TestWebSocketEndpoint:
             assert response["error"]["short_code"] == "not_found"
 
     def test_with_room_not_member(
-        self, token: str, client: TestClient, rooms_with_keyclock: list[Room]
+        self, token: str, client: TestClient, rooms_with_mindplex: list[Room]
     ):
-        endpoint = f"/ws/rooms/{rooms_with_keyclock[2].id}?token={token}"
+        endpoint = f"/ws/rooms/{rooms_with_mindplex[2].id}?token={token}"
 
         with client.websocket_connect(endpoint) as websocket:
             response = websocket.receive_json()
@@ -42,9 +42,9 @@ class TestWebSocketEndpoint:
             assert response["error"]["short_code"] == "not_in_room"
 
     def test_with_room_member(
-        self, token: str, client: TestClient, rooms_with_keyclock: list[Room]
+        self, token: str, client: TestClient, rooms_with_mindplex: list[Room]
     ):
-        endpoint = f"/ws/rooms/{rooms_with_keyclock[1].id}?token={token}"
+        endpoint = f"/ws/rooms/{rooms_with_mindplex[1].id}?token={token}"
 
         with client.websocket_connect(endpoint) as websocket:
             response = websocket.receive_json()
@@ -58,11 +58,11 @@ class TestWebSocketEndpoint:
     #     token: str,
     #     tony_token,
     #     client: TestClient,
-    #     rooms_with_keyclock: list[Room],
+    #     rooms_with_mindplex: list[Room],
     # ):
-    #     endpoint1 = f"/ws/rooms/{rooms_with_keyclock[0].id}?token={token}"
-    #     endpoint2 = f"/ws/rooms/{rooms_with_keyclock[0].id}?token={token}"
-    #     print("Room ID", rooms_with_keyclock[0].id)
+    #     endpoint1 = f"/ws/rooms/{rooms_with_mindplex[0].id}?token={token}"
+    #     endpoint2 = f"/ws/rooms/{rooms_with_mindplex[0].id}?token={token}"
+    #     print("Room ID", rooms_with_mindplex[0].id)
     #
     #     with client.websocket_connect(endpoint1) as ws1:
     #         with client.websocket_connect(endpoint2) as ws2:

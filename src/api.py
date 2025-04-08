@@ -9,73 +9,75 @@ from pydantic import BaseModel, Field, Json, ValidationError
 dotenv.load_dotenv()
 
 
-class KeyclockApiException(Exception):
+class MindplexApiException(Exception):
     pass
 
-
-class KeyclockUser(BaseModel):
-    id: uuid.UUID
-    username: str
-    firstName: str
-    lastName: str
-    email: str
-    created_timestamp: Annotated[int, Field(alias="createdTimestamp")]
-
-
-class Keyclock:
-    url = os.getenv("KEYCLOCK_URL")
-    realm = os.getenv("KEYCLOCK_REALM")
-    client_secret = os.getenv("KEYCLOCK_CLIENT_SECRET")
-    client_id = os.getenv("KEYCLOCK_CLIENT_ID")
-    token_url = f"{url}/realms/{realm}/protocol/openid-connect/token"
-    _service_access_token = {}
-
-    common_headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Cookie": "AWSALBAPP-0=_remove_; AWSALBAPP-1=_remove_; AWSALBAPP-2=_remove_; AWSALBAPP-3=_remove_",
+"""
+    {
+        "user_id": 13,
+        "username": "esubalewA",
+        "first_name": "Esubalew",
+        "last_name": "Amenu",
+        "theme": "light",
+        "avatar_url": "https://secure.gravatar.com/avatar/5e9ebd86529dcac05164aacedf030ac7?s=96&d=mm&r=g",
+        "mpxr": 13.26679,
+        "is_following": false,
+        "is_friends": false,
+        "date_of_birth": "",
+        "age": 27,
+        "gender": "Other",
+        "education": {
+            "id": "37",
+            "educational_background": "Master\\&#039;s degree                                                "
+        },
+        "interest": [],
+        "social_media": [
+            "https://twitter.com/EsubalewA"
+        ],
+        "biography": "lkdsjkjsdf",
+        "followings": 3,
+        "followers": 4,
+        "friends": 0
     }
+"""
 
-    @property
-    async def service_access_token(self):
-        payload = {
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "grant_type": "client_credentials",
-        }
+class MindplexUser(BaseModel):
+    """Mindplex data necessary for the chat app"""
+    username: str
+    first_name: str
+    last_name: str
+    avatar_url: str
 
-        if self._service_access_token:
-            if self._service_access_token["expires_in_dt"] > datetime.now():
-                return self._service_access_token["access_token"]
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.token_url, headers=self.common_headers, data=payload
-            )
+class Mindplex:
+    url = os.getenv("MINDPLEX_URL")
 
-            data = response.json()
-            self._service_access_token = data.copy()
-            self._service_access_token["expires_in_dt"] = datetime.now() + timedelta(
-                seconds=data["expires_in"]
-            )
-            return data["access_token"]
-
-    async def get_user(self, user_id: str) -> KeyclockUser:
-        url = f"{self.url}/admin/realms/{self.realm}/users/{user_id}"
+    async def get_user(self, username: str) -> MindplexUser:
+        url = f"{self.url}/wp/v2/users/profile/{username}"
 
         async with httpx.AsyncClient() as client:
-            res = await client.get(
-                url, headers={"Authorization": f"Bearer {await self.service_access_token}"}
-            )
+            res = await client.get(url)
 
         if res.status_code == 200:
             user_dict = res.json()
             try:
-                user = KeyclockUser.model_validate(user_dict)
+                user = MindplexUser.model_validate(user_dict)
                 return user
             except ValidationError as e:
-                raise KeyclockApiException(
+                raise MindplexApiException(
                     "User validation error", e.errors(), user_dict
                 )
         else:
-            raise KeyclockApiException("User not found", res.json())
+            raise MindplexApiException("User not found", res.json())
+
+    async def get_user_id(self, user: MindplexUser | str) -> str:
+
+        if type(user) is str:
+            user = await self.get_user(user)
+
+        assert type(user) is MindplexUser
+        return user.username
+
+
+
 

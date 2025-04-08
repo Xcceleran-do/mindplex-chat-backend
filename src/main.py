@@ -8,9 +8,9 @@ from fastapi import (
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, or_, select
+from sqlmodel import Session, or_, select, delete
 import dotenv
-from .dependencies import get_session, get_user_dep, get_user, get_user_from_qp_dep
+from .dependencies import get_session, get_user_dep
 from . import sock
 from .models import (
     RoomCreate,
@@ -24,19 +24,38 @@ from .models import (
     UserNotFoundException,
     engine,
 )
-
+import asyncio
+from datetime import datetime, timedelta, timezone
 
 dotenv.load_dotenv()
+
+UNIVERSAL_GROUP_EXPIRY = 60  # In seconds
+
+async def remove_expired_rooms():
+    """Deletes universal rooms that have expired """
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            expiry_threshold = now - timedelta(seconds=UNIVERSAL_GROUP_EXPIRY)
+
+            with Session(engine) as session:
+                stmt = delete(Room).where(Room.last_interacted<expiry_threshold)
+                result = session.exec(stmt)
+                session.commit()
+                print(f"Deleted {result.rowcount} expired rooms.")  # Logs the count of deleted rooms
+
+            await asyncio.sleep(3)
+        except KeyboardInterrupt as e:
+            break
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
+    asyncio.create_task(remove_expired_rooms())
     yield
-
     if os.getenv("ENV", "") != "dev":
         SQLModel.metadata.drop_all(engine)
-
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(sock.router)
@@ -47,6 +66,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 
 @app.get("/rooms/", response_model=list[Room])
@@ -97,7 +118,7 @@ async def create_room(
 
         for participant in participants:
             try:
-                user = await User.from_keyclock_or_db(participant, session)
+                user = await User.from_remote_or_db(participant, session)
             except UserNotFoundException:
                 raise HTTPException(status_code=400, detail="Participant not found")
 
@@ -125,6 +146,10 @@ async def get_room(
     except AssertionError:  # Just in case
         raise HTTPException(status_code=404, detail="Room not found")
 
+    print("is in room: ", await room.is_in_room(user))
+    print("user: ", user)
+    print("room: ", room) 
+    print("room participants: ", room.participants)
     if not await room.is_in_room(user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"

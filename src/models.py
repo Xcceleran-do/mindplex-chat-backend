@@ -11,7 +11,7 @@ from sqlmodel import (
     create_engine,
     select,
 )
-from .api import Keyclock, KeyclockApiException
+from .api import MindplexUser, Mindplex, MindplexApiException
 import secrets
 
 
@@ -56,7 +56,7 @@ class RoomMessagesLink(SQLModel, table=True):
 
 class User(SQLModel, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
-    keyclock_id: str = Field(unique=True)
+    remote_id: str = Field(unique=True)
 
     rooms: list["Room"] = Relationship(
         back_populates="participants", link_model=RoomParticipantLink
@@ -66,43 +66,43 @@ class User(SQLModel, table=True):
     )
     messages: list["Message"] = Relationship(back_populates="owner")
 
-    _table_args__ = (UniqueConstraint("id", "keyclock_id"),)
+    _table_args__ = (UniqueConstraint("id", "remote_id"),)
 
     def all_rooms(self) -> list["Room"]:
         """Returns a list of rooms where the user is either a participant or the owner"""
         return self.rooms + self.owned_rooms
 
     @classmethod
-    async def from_keyclock_or_db(cls, keyclock_id, session: Session) -> "User":
-        """gets a user from keyclock or the local database respectively
+    async def from_remote_or_db(cls, remote_id, session: Session) -> "User":
+        """gets a user from remote servers or the local database respectively
 
         Args:
-            keyclock_id (str): the keycloak id
+            remote_id (str): the mindplex(or any user providing service) id
             session (Session): the session to use
 
         Returns:
             User: the user
 
         Raises:
-            UserNotFoundException: if the user is not found in both keyclock and local
+            UserNotFoundException: if the user is not found in both remote server and local
             db
         """
 
-        user = session.exec(select(User).where(User.keyclock_id == keyclock_id)).first()
+        user = session.exec(select(User).where(User.remote_id == remote_id)).first()
 
         if user is not None:
             return user
 
-        # get user from keycloack
-        kc_api = Keyclock()
+        # get user from mindplex
+        mpx_sdk = Mindplex()
         try:
-            keyclock_user = await kc_api.get_user(keyclock_id)
-            user = User(keyclock_id=str(keyclock_user.id))
+            remote_user = await mpx_sdk.get_user(remote_id)
+            user = User(remote_id=await mpx_sdk.get_user_id(remote_user))
             return user
-        except KeyclockApiException:
+        except MindplexApiException:
             # TODO: log error
             raise UserNotFoundException(
-                f"User with keyclock id {keyclock_id} not found"
+                f"User with remote id {remote_id} not found"
             )
 
 
@@ -112,7 +112,6 @@ class RoomBase(SQLModel):
 
 class Room(RoomBase, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
-    # room_type: RoomType = Field(default=RoomType.UNIVERSAL)
 
     participants: list[User] = Relationship(
         back_populates="rooms", link_model=RoomParticipantLink
@@ -124,6 +123,7 @@ class Room(RoomBase, table=True):
     owner_id: str = Field(foreign_key="user.id")
     owner: User = Relationship(back_populates="owned_rooms")
     created: datetime = Field(default_factory=datetime.now)
+    last_interacted: datetime = Field(default_factory=datetime.now)
 
     async def add_participant(self, participant: "User"):
         """add a participant to the room and commit to db.

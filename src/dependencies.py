@@ -23,17 +23,7 @@ def get_user(authorization: str, session: Session) -> User:
         User: the authenticated user
     """
 
-    JWT_KEY = """
-    -----BEGIN PUBLIC KEY-----
-    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr+gOQGmyRCXO7UWGT9ub
-    Pap1jn+HFDk6i7RGXNQQagpan0OvDmo26IpT/fL9QfUpIvz+TaWRw+n171oduqK0
-    Qksv/hjHVYnHB+EcZ6TlyebTk1wCXxDTs0XLH2ugbSJtnhida/JBToeMzcArfPbU
-    ag6ZqBjNQqQXXe+gUvG8Ln0U9ZLfclz9NDqebdcHeVnQ+L4mOJiXHz5CHOcfPRhW
-    YI+rXIDC1zylWeQV0Dxcd0JThaVWnpiJA+ciBZzs9Hnf9zlaw63mS4sRBGGbjonx
-    tVe8eFWj9KDa7XbeQf6bG5T0Vfh8hLcwtg8jgkE+6IrrVR3HHHHEC/9JyoBsIrcZ
-    bwIDAQAB
-    -----END PUBLIC KEY-----
-    """
+    JWT_KEY = "e47a9bb31d8f785b2dbf4f0cd79879ae01de30f5" 
 
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid or missing token")
@@ -45,21 +35,25 @@ def get_user(authorization: str, session: Session) -> User:
         payload = jwt.decode(
             token,
             JWT_KEY,
-            algorithms=["RS256"],  
+            algorithms=["HS256"],  
             options={
                 "verify_aud": False
             },
+            leeway=10
         )
 
     except InvalidTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
+    username = payload["data"]["user"]["id"]
+
     # get or create the user
-    user = session.exec(select(User).where(User.keyclock_id == payload["sub"])).first()
+    user = session.exec(select(User).where(User.remote_id == username)).first()
+    print("user from token: ", payload)
 
     if user is None:
         user = User(
-            keyclock_id=payload["sub"],
+            remote_id=username,
         )
         session.add(user)
         session.commit()
