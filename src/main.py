@@ -31,19 +31,22 @@ dotenv.load_dotenv()
 
 UNIVERSAL_GROUP_EXPIRY = 60  # In seconds
 
-async def remove_expired_rooms():
+async def remove_expired_rooms_once(expiry):
+    now = datetime.now(timezone.utc)
+    expiry_threshold = now - timedelta(expiry)
+
+    with Session(engine) as session:
+        stmt = delete(Room).where(Room.last_interacted<expiry_threshold)
+        result = session.exec(stmt)
+        session.commit()
+
+    # await asyncio.sleep(1)
+
+async def remove_expired_rooms_task():
     """Deletes universal rooms that have expired """
     while True:
         try:
-            now = datetime.now(timezone.utc)
-            expiry_threshold = now - timedelta(seconds=UNIVERSAL_GROUP_EXPIRY)
-
-            with Session(engine) as session:
-                stmt = delete(Room).where(Room.last_interacted<expiry_threshold)
-                result = session.exec(stmt)
-                session.commit()
-
-            await asyncio.sleep(3)
+            await remove_expired_rooms_once(UNIVERSAL_GROUP_EXPIRY)
         except KeyboardInterrupt as e:
             break
 
@@ -51,7 +54,7 @@ async def remove_expired_rooms():
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
-    asyncio.create_task(remove_expired_rooms())
+    # asyncio.create_task(remove_expired_rooms_task())
     yield
     if os.getenv("ENV", "") != "dev":
         SQLModel.metadata.drop_all(engine)
@@ -76,6 +79,10 @@ def get_rooms(
     private: bool = False,
     owned: bool = False,
 ):
+
+    now = datetime.now(timezone.utc)
+    group_expiry_threshold = now - timedelta(seconds=UNIVERSAL_GROUP_EXPIRY)
+
     query = (
         select(Room)
         .join(RoomParticipantLink)
@@ -84,6 +91,7 @@ def get_rooms(
                 Room.owner_id == user.id,
                 RoomParticipantLink.user_id == user.id,
                 Room.room_type == RoomType.UNIVERSAL,
+                Room.last_interacted < group_expiry_threshold
             )
         )
     )
