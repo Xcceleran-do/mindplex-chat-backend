@@ -8,8 +8,9 @@ from fastapi import (
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, or_, select, delete
+from sqlmodel import Session, and_, or_, select
 import dotenv
+from starlette.background import BackgroundTask
 from .dependencies import get_session, get_user_dep
 from . import sock
 from .models import (
@@ -24,38 +25,21 @@ from .models import (
     UserNotFoundException,
     engine,
 )
-import asyncio
 from datetime import datetime, timedelta, timezone
+from src.tasks import UNIVERSAL_GROUP_EXPIRY, remove_expired_rooms_once
 
 dotenv.load_dotenv()
-
-UNIVERSAL_GROUP_EXPIRY = 60  # In seconds
-
-async def remove_expired_rooms_once(expiry):
-    now = datetime.now(timezone.utc)
-    expiry_threshold = now - timedelta(expiry)
-
-    with Session(engine) as session:
-        stmt = delete(Room).where(Room.last_interacted<expiry_threshold)
-        result = session.exec(stmt)
-        session.commit()
-
-    # await asyncio.sleep(1)
-
-async def remove_expired_rooms_task():
-    """Deletes universal rooms that have expired """
-    while True:
-        try:
-            await remove_expired_rooms_once(UNIVERSAL_GROUP_EXPIRY)
-        except KeyboardInterrupt as e:
-            break
-
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
-    # asyncio.create_task(remove_expired_rooms_task())
+    # task = asyncio.create_task(remove_expired_rooms_task())
+    # task = BackgroundTask(remove_expired_rooms_task)
+    # print("task: ", task)
+
     yield
+
+    # task.cancel()
     if os.getenv("ENV", "") != "dev":
         SQLModel.metadata.drop_all(engine)
 
@@ -71,7 +55,6 @@ app.add_middleware(
 
 
 
-
 @app.get("/rooms/", response_model=list[Room])
 async def get_rooms(
     session: Annotated[Session, Depends(get_session)],
@@ -79,6 +62,7 @@ async def get_rooms(
     private: bool = False,
     owned: bool = False,
 ):
+    await remove_expired_rooms_once(60)
 
     now = datetime.now(timezone.utc)
     group_expiry_threshold = now - timedelta(seconds=UNIVERSAL_GROUP_EXPIRY)
@@ -106,6 +90,8 @@ async def get_rooms(
 
     rooms = session.exec(query).all()
 
+    print("rooms: ", rooms)
+
     return rooms
 
 
@@ -116,6 +102,8 @@ async def create_room(
     user: Annotated[User, Depends(get_user_dep)],
     session: Annotated[Session, Depends(get_session)],
 ):
+
+    await remove_expired_rooms_once(60)
 
     if room.room_type == RoomType.PRIVATE:
         if len(room.participants) == 0 or len(room.participants) > 1:
@@ -148,6 +136,9 @@ async def get_room(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
+
+    await remove_expired_rooms_once(60)
+
     try:
         room = await Room.get_by_id(room_id, session, raise_exc=True)
         assert room
@@ -172,6 +163,8 @@ async def get_room_messages(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
+
+    await remove_expired_rooms_once(60)
 
     room = await Room.get_by_id(room_id, session, raise_exc=False)
 
