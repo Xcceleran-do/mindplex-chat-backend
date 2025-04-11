@@ -10,7 +10,6 @@ from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, and_, or_, select
 import dotenv
-from starlette.background import BackgroundTask
 from .dependencies import get_session, get_user_dep
 from . import sock
 from .models import (
@@ -25,18 +24,13 @@ from .models import (
     UserNotFoundException,
     engine,
 )
-from datetime import datetime, timedelta, timezone
-from src.tasks import UNIVERSAL_GROUP_EXPIRY, remove_expired_rooms_once
+from datetime import datetime, timedelta
 
 dotenv.load_dotenv()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
-    # task = asyncio.create_task(remove_expired_rooms_task())
-    # task = BackgroundTask(remove_expired_rooms_task)
-    # print("task: ", task)
-
     yield
 
     # task.cancel()
@@ -62,7 +56,7 @@ async def get_rooms(
     private: bool = False,
     owned: bool = False,
 ):
-    await remove_expired_rooms_once(5)
+    # await remove_expired_rooms_once(5)
 
     query = (
         select(Room)
@@ -103,7 +97,7 @@ async def create_room(
     session: Annotated[Session, Depends(get_session)],
 ):
 
-    await remove_expired_rooms_once(60)
+    # await remove_expired_rooms_once(60)
 
     if room.room_type == RoomType.PRIVATE:
         if len(room.participants) == 0 or len(room.participants) > 1:

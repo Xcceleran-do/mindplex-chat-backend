@@ -1,6 +1,6 @@
 from src.models import RoomType, RoomParticipantLink, Room, User, Message
 import pytest
-from sqlmodel import Session, select, or_
+from sqlmodel import Session, select, delete, or_
 from .fixtures import *
 
 
@@ -150,6 +150,37 @@ class TestRoom:
         for room in queried_rooms:
             assert room not in expired_rooms
 
+    @pytest.mark.asyncio
+    async def test_room_expiry_deletion(
+            self,
+            session: Session,
+            unexpired_rooms: list[Room],
+            expired_rooms: list[Room],
+            users: list[User]
+    ):
+
+        expired_room_ids = [room.id for room in expired_rooms]
+        delete_query = (
+            delete(Room)
+            .where(
+                or_(
+                    Room.last_interacted < datetime.now() - timedelta(seconds=50),
+                    Room.room_type == RoomType.PRIVATE
+                )
+            )
+        )
+
+        session.exec(delete_query)
+        session.commit()
+
+        select_query = select(Room)
+        queried_rooms = session.exec(select_query).all()
+        session.commit()
+
+        assert len(queried_rooms) == len(unexpired_rooms)
+
+        for room in queried_rooms:
+            assert room.id not in expired_room_ids 
 
 
 
