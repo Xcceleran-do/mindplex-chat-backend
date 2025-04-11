@@ -60,8 +60,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	return {
 		user: {
-			userId,
-			token
+			token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL3N0YWdpbmcubWluZHBsZXguYWkiLCJpYXQiOjE3NDQyODc1NTEsIm5iZiI6MTc0NDI4NzU1MSwiZXhwIjoxNzQ0NTQ2NzUxLCJkYXRhIjp7InVzZXIiOnsiaWQiOiIxIn19fQ.3s1cNTWEBfC7n9r6R4l9m37pVXfJavYIy1mda5PhlFA"
 		}
 	};
 };

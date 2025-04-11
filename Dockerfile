@@ -1,11 +1,21 @@
-FROM python:3.12
+FROM python:3.13-slim
 
 WORKDIR /src
 
-COPY ./requirements.txt .
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade -r requirements.txt
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./src/ .
+# Copy application code
+COPY ./src .
+
+# Expose the port the app runs on
+EXPOSE 80
 
 CMD ["fastapi", "run", "main.py", "--port", "80"]

@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+import os
 from typing import Annotated, Optional
 from pydantic import BaseModel
 from sqlmodel import (
@@ -15,7 +16,8 @@ from .api import MindplexUser, Mindplex, MindplexApiException
 import secrets
 
 
-engine = create_engine("sqlite:///mindplex-chat.db")
+# engine = create_engine("sqlite:///mindplex-chat.db")
+engine = create_engine(os.environ.get("DATABASE_URL"))
 
 
 # Helpers

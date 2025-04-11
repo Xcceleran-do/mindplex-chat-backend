@@ -16,9 +16,9 @@
 
 	
 
-	const BACKEND_HOST = "localhost:8000"
+	const BACKEND_HOST = "localhost"
 
-	const room_id = "7c3d7930c128cdb4"
+	const room_id = "87e6efa27a10c41b"
 
 	let messages: HTMLDivElement
 
@@ -29,7 +29,7 @@
 		
 		if (browser) {
 
-			const ws = new WebSocket(`ws://${BACKEND_HOST}/ws/rooms/${room_id}?token=${user.token}`); // Change to your WebSocket URL
+			const ws = new WebSocket(`ws://${BACKEND_HOST}/ws/rooms/${room_id}?token=${user.token}&username=dave`); // Change to your WebSocket URL
 
 			ws.onopen = () => {
 				console.log("Connected to WebSocket server");
