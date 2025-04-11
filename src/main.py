@@ -131,7 +131,7 @@ async def get_room(
     user: Annotated[User, Depends(get_user_dep)],
 ):
 
-    await remove_expired_rooms_once(60)
+    # await remove_expired_rooms_once(60)
 
     try:
         room = await Room.get_by_id(room_id, session, raise_exc=True)
@@ -158,7 +158,7 @@ async def get_room_messages(
     user: Annotated[User, Depends(get_user_dep)],
 ):
 
-    await remove_expired_rooms_once(60)
+    # await remove_expired_rooms_once(60)
 
     room = await Room.get_by_id(room_id, session, raise_exc=False)
 
