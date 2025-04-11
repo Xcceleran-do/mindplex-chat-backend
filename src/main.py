@@ -24,13 +24,18 @@ from .models import (
     UserNotFoundException,
     engine,
 )
+from .tasks import remove_expired_rooms_once
 from datetime import datetime, timedelta
 
 dotenv.load_dotenv()
 
+
+DEFAULT_UNIVERSAL_GROUP_EXPIRY = 10 * 60
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
+
     yield
 
     # task.cancel()
@@ -47,6 +52,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def remove_expired_rooms(request, call_next):
+    await remove_expired_rooms_once(DEFAULT_UNIVERSAL_GROUP_EXPIRY)
+    response = await call_next(request)
+    return response
 
 
 @app.get("/rooms/", response_model=list[Room])
@@ -62,7 +72,7 @@ async def get_rooms(
         select(Room)
         .where(
             or_(
-                Room.last_interacted > datetime.now() - timedelta(seconds=5),
+                Room.last_interacted > datetime.now() - timedelta(seconds=DEFAULT_UNIVERSAL_GROUP_EXPIRY),
                 Room.room_type == RoomType.PRIVATE
             )
         )
