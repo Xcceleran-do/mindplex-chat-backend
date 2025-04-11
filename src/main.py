@@ -73,7 +73,7 @@ app.add_middleware(
 
 
 @app.get("/rooms/", response_model=list[Room])
-def get_rooms(
+async def get_rooms(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
     private: bool = False,
@@ -85,15 +85,18 @@ def get_rooms(
 
     query = (
         select(Room)
-        .join(RoomParticipantLink)
+        .join(RoomParticipantLink, isouter=True)
         .where(
             or_(
                 Room.owner_id == user.id,
                 RoomParticipantLink.user_id == user.id,
                 Room.room_type == RoomType.UNIVERSAL,
-                Room.last_interacted < group_expiry_threshold
+                and_(
+                    Room.room_type != RoomType.UNIVERSAL,
+                    Room.last_interacted > group_expiry_threshold
+                )
             )
-        )
+        ).distinct()
     )
 
     if private:
