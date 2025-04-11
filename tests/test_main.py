@@ -1,42 +1,10 @@
 from typing import Any
 from fastapi.testclient import TestClient
 from sqlmodel import select
-from datetime import datetime, timedelta, timezone
 
 from src.models import User
 from .fixtures import *
-from src.main import remove_expired_rooms_once
 
-# def test_remove_expired_rooms(rooms):
-#     for room in rooms:
-#         print("room_last_interaction: ", room.last_interacted)
-#
-#     assert False
-
-@pytest.mark.asyncio
-async def test_remove_expired_rooms_once(session: Session, users: list[User]):
-    now = datetime.now(timezone.utc)
-    expired_time = now - timedelta(seconds=100)
-    fresh_time = now
-
-    assert users[0].id
-
-    # Insert 1 expired and 1 fresh room
-    session.add(Room(id='1', last_interacted=expired_time, owner_id=users[0].id))
-    session.add(Room(id='2', last_interacted=fresh_time, owner_id=users[0].id))
-    session.commit()
-
-    await remove_expired_rooms_once(50)
-
-    # Now verify only the fresh room remains
-    remaining = session.exec(select(Room)).all()
-    assert len(remaining) == 1
-    assert remaining[0].id == '2'
-
-
-class TestRemoveExpiredRooms:
-    def test_remove_expired_rooms(self, client: TestClient, session: Session):
-        pass
 
 class TestCreateRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient):
@@ -188,6 +156,22 @@ class TestGetRoom:
         assert non_owner_user
 
         assert non_owner_user.remote_id != str(mindplex_users["dave"].username)
+
+    def test_expired_rooms(self,  token: dict[str, Any], client: TestClient, expired_rooms: list[Room], unexpired_rooms:list[Room], mindplex_users: dict[str, MindplexUser]):
+        response = client.get(
+            f"/rooms",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Username": mindplex_users["dave"].username
+            }
+        )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert len(data) == len(unexpired_rooms)
+
+        for room in data:
+            assert room["id"] in [room.id for room in unexpired_rooms]
 
 
 class TestGetRoomMessages:

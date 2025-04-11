@@ -8,7 +8,7 @@ from fastapi import (
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, or_, select, delete
+from sqlmodel import Session, and_, or_, select
 import dotenv
 from .dependencies import get_session, get_user_dep
 from . import sock
@@ -24,38 +24,16 @@ from .models import (
     UserNotFoundException,
     engine,
 )
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 dotenv.load_dotenv()
-
-UNIVERSAL_GROUP_EXPIRY = 60  # In seconds
-
-async def remove_expired_rooms_once(expiry):
-    now = datetime.now(timezone.utc)
-    expiry_threshold = now - timedelta(expiry)
-
-    with Session(engine) as session:
-        stmt = delete(Room).where(Room.last_interacted<expiry_threshold)
-        result = session.exec(stmt)
-        session.commit()
-
-    # await asyncio.sleep(1)
-
-async def remove_expired_rooms_task():
-    """Deletes universal rooms that have expired """
-    while True:
-        try:
-            await remove_expired_rooms_once(UNIVERSAL_GROUP_EXPIRY)
-        except KeyboardInterrupt as e:
-            break
-
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
-    # asyncio.create_task(remove_expired_rooms_task())
     yield
+
+    # task.cancel()
     if os.getenv("ENV", "") != "dev":
         SQLModel.metadata.drop_all(engine)
 
@@ -71,27 +49,32 @@ app.add_middleware(
 
 
 
-
 @app.get("/rooms/", response_model=list[Room])
-def get_rooms(
+async def get_rooms(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
     private: bool = False,
     owned: bool = False,
 ):
-
-    now = datetime.now(timezone.utc)
-    group_expiry_threshold = now - timedelta(seconds=UNIVERSAL_GROUP_EXPIRY)
+    # await remove_expired_rooms_once(5)
 
     query = (
         select(Room)
-        .join(RoomParticipantLink)
+        .where(
+            or_(
+                Room.last_interacted > datetime.now() - timedelta(seconds=5),
+                Room.room_type == RoomType.PRIVATE
+            )
+        )
+    )
+
+    query = (
+        query
+        .join(RoomParticipantLink, isouter=True)
         .where(
             or_(
                 Room.owner_id == user.id,
                 RoomParticipantLink.user_id == user.id,
-                Room.room_type == RoomType.UNIVERSAL,
-                Room.last_interacted < group_expiry_threshold
             )
         )
     )
@@ -113,6 +96,8 @@ async def create_room(
     user: Annotated[User, Depends(get_user_dep)],
     session: Annotated[Session, Depends(get_session)],
 ):
+
+    # await remove_expired_rooms_once(60)
 
     if room.room_type == RoomType.PRIVATE:
         if len(room.participants) == 0 or len(room.participants) > 1:
@@ -145,6 +130,9 @@ async def get_room(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
+
+    await remove_expired_rooms_once(60)
+
     try:
         room = await Room.get_by_id(room_id, session, raise_exc=True)
         assert room
@@ -169,6 +157,8 @@ async def get_room_messages(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
+
+    await remove_expired_rooms_once(60)
 
     room = await Room.get_by_id(room_id, session, raise_exc=False)
 
