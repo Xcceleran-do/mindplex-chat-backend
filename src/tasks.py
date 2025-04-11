@@ -24,6 +24,5 @@ async def remove_expired_rooms_once(expiry):
 async def remove_expired_rooms_task():
     """Deletes universal rooms that have expired """
     while True:
-        print("Removing expired rooms")
-        # await remove_expired_rooms_once(UNIVERSAL_GROUP_EXPIRY)
+        await remove_expired_rooms_once(UNIVERSAL_GROUP_EXPIRY)
 

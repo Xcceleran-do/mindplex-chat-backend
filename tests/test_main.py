@@ -6,10 +6,6 @@ from src.models import User
 from .fixtures import *
 
 
-class TestRemoveExpiredRooms:
-    def test_remove_expired_rooms(self, client: TestClient, session: Session):
-        pass
-
 class TestCreateRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient):
         response = client.post(
@@ -160,6 +156,22 @@ class TestGetRoom:
         assert non_owner_user
 
         assert non_owner_user.remote_id != str(mindplex_users["dave"].username)
+
+    def test_expired_rooms(self,  token: dict[str, Any], client: TestClient, expired_rooms: list[Room], unexpired_rooms:list[Room], mindplex_users: dict[str, MindplexUser]):
+        response = client.get(
+            f"/rooms",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Username": mindplex_users["dave"].username
+            }
+        )
+
+        data = response.json()
+        assert response.status_code == 200
+        assert len(data) == len(unexpired_rooms)
+
+        for room in data:
+            assert room["id"] in [room.id for room in unexpired_rooms]
 
 
 class TestGetRoomMessages:

@@ -62,25 +62,27 @@ async def get_rooms(
     private: bool = False,
     owned: bool = False,
 ):
-    await remove_expired_rooms_once(60)
-
-    now = datetime.now(timezone.utc)
-    group_expiry_threshold = now - timedelta(seconds=UNIVERSAL_GROUP_EXPIRY)
+    await remove_expired_rooms_once(5)
 
     query = (
         select(Room)
+        .where(
+            or_(
+                Room.last_interacted > datetime.now() - timedelta(seconds=5),
+                Room.room_type == RoomType.PRIVATE
+            )
+        )
+    )
+
+    query = (
+        query
         .join(RoomParticipantLink, isouter=True)
         .where(
             or_(
                 Room.owner_id == user.id,
                 RoomParticipantLink.user_id == user.id,
-                Room.room_type == RoomType.UNIVERSAL,
-                and_(
-                    Room.room_type != RoomType.UNIVERSAL,
-                    Room.last_interacted > group_expiry_threshold
-                )
             )
-        ).distinct()
+        )
     )
 
     if private:
@@ -89,8 +91,6 @@ async def get_rooms(
         query = query.where(Room.owner_id == user.id)
 
     rooms = session.exec(query).all()
-
-    print("rooms: ", rooms)
 
     return rooms
 

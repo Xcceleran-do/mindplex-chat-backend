@@ -1,6 +1,6 @@
-from src.models import RoomType, RoomValidationException, SQLModel, Room, User, Message
+from src.models import RoomType, RoomParticipantLink, Room, User, Message
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select, or_
 from .fixtures import *
 
 
@@ -124,4 +124,33 @@ class TestRoom:
 
         assert not await rooms[1].is_in_room(users[0])
         assert await rooms[1].is_in_room(users[1])
+
+    @pytest.mark.asyncio
+    async def test_room_expiry(
+            self,
+            session: Session,
+            unexpired_rooms: list[Room],
+            expired_rooms: list[Room],
+            users: list[User]
+    ):
+
+        query = (
+            select(Room)
+            .where(
+                or_(
+                    Room.last_interacted > datetime.now() - timedelta(seconds=50),
+                    Room.room_type == RoomType.PRIVATE
+                )
+            )
+        )
+
+        queried_rooms = session.exec(query).all()
+        assert len(queried_rooms) == len(unexpired_rooms)
+
+        for room in queried_rooms:
+            assert room not in expired_rooms
+
+
+
+
 

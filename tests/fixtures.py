@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import pytest
 from src.api import Mindplex, MindplexUser
@@ -110,6 +110,32 @@ async def rooms_with_mindplex_users_fixture(
     
     return [room, room2, room3]
 
+@pytest.fixture(name="expired_rooms")
+def expired_rooms_fixture(session: Session, users: list[User]):
+    assert users[0].id
+    room = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=100))
+    room2 = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=200))
+    room3 = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=300))
+    session.add(room)
+    session.add(room2)
+    session.add(room3)
+    session.commit()
+
+    return [room, room2, room3]
+
+@pytest.fixture(name="unexpired_rooms")
+def unexpired_rooms_fixture(session: Session, users: list[User]):
+    assert users[0].id
+    room = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=100))
+    room2 = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=200))
+    room3 = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=300))
+    session.add(room)
+    session.add(room2)
+    session.add(room3)
+    session.commit()
+
+    return [room, room2, room3]
+    
 
 @pytest.fixture(name="messages")
 def message_fixture(session: Session, users: list[User], rooms: list[Room]):
