@@ -4,7 +4,7 @@ import pytest
 from src.api import Mindplex, MindplexUser
 from src.models import RoomType, SQLModel, Room, User, Message, engine
 from sqlmodel import create_engine, Session
-from src.main import app
+from src.main import app, DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from fastapi.testclient import TestClient
 import httpx
 import pytest_asyncio
@@ -113,9 +113,9 @@ async def rooms_with_mindplex_users_fixture(
 @pytest.fixture(name="expired_rooms")
 def expired_rooms_fixture(session: Session, users: list[User]):
     assert users[0].id
-    room = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=100))
-    room2 = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=200))
-    room3 = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=300))
+    room = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=100+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
+    room2 = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=200+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
+    room3 = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=300+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
     session.add(room)
     session.add(room2)
     session.add(room3)
@@ -126,9 +126,9 @@ def expired_rooms_fixture(session: Session, users: list[User]):
 @pytest.fixture(name="unexpired_rooms")
 def unexpired_rooms_fixture(session: Session, users: list[User]):
     assert users[0].id
-    room = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=100))
-    room2 = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=200))
-    room3 = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=300))
+    room = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=100+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
+    room2 = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=200+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
+    room3 = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=300+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
     session.add(room)
     session.add(room2)
     session.add(room3)

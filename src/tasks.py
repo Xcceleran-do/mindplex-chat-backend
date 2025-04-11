@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from src.models import engine, Session, Room, RoomType
-from sqlmodel import delete, or_
+from sqlmodel import delete, or_, and_
 
 
 async def remove_expired_rooms_task(expiry):
@@ -18,9 +18,9 @@ async def remove_expired_rooms_once(expiry):
 
     with Session(engine) as session:
         stmt = delete(Room).where(
-            or_(
+            and_(
                 Room.last_interacted < datetime.now() - timedelta(seconds=expiry),
-                Room.room_type == RoomType.PRIVATE
+                Room.room_type == RoomType.UNIVERSAL
             )
         )
 

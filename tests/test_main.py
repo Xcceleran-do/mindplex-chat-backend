@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from src.models import User
+from src.main import DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from .fixtures import *
 
 
@@ -168,6 +169,7 @@ class TestGetRoom:
 
         data = response.json()
         assert response.status_code == 200
+
         assert len(data) == len(unexpired_rooms)
 
         for room in data:

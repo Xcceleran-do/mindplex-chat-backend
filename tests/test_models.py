@@ -1,4 +1,4 @@
-from src.models import RoomType, RoomParticipantLink, Room, User, Message
+from src.models import RoomType, RoomParticipantLink, Room, User, Message, RoomValidationException
 import pytest
 from sqlmodel import Session, select, delete, or_
 from .fixtures import *
