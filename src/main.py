@@ -161,6 +161,22 @@ async def get_room(
     assert room is not None
     return room
 
+
+@app.post("/rooms/{room_id}/interaction", response_model=Room)
+async def update_room_interaction(
+    room_id: str,
+    session: Annotated[Session, Depends(get_session)],
+    user: Annotated[User, Depends(get_user_dep)],
+):
+    room = await Room.get_by_id(room_id, session, raise_exc=True)
+    assert room
+
+    room.last_interacted = datetime.now()
+    session.commit()
+    session.refresh(room)
+
+    return room
+
 @app.get("/rooms/{room_id}/message", response_model=list[Message])
 async def get_room_messages(
     room_id: str,
