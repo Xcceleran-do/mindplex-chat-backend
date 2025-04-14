@@ -5,9 +5,9 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-    command: fastapi run main.py --port 80
+    command: fastapi run ./src/main.py --port 80
     volumes:
-      - ./app:/app
+      - .:/src
     ports:
       - "9010:80"
     env_file:
@@ -23,19 +23,5 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  # pgadmin:
-  #   image: dpage/pgadmin4
-  #   container_name: pgadmin
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@admin.com}
-  #     PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
-  #   ports:
-  #     - "5050:80"
-  #   depends_on:
-  #     - db
-  #   networks:
-  #     - fastapi-network
-  #
 volumes:
   postgres_data:
