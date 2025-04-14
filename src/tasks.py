@@ -14,8 +14,6 @@ async def remove_expired_rooms_task(expiry):
 
 
 async def remove_expired_rooms_once(expiry):
-    print("Removing expired rooms")
-
     with Session(engine) as session:
         stmt = delete(Room).where(
             and_(
@@ -27,4 +25,4 @@ async def remove_expired_rooms_once(expiry):
         result = session.exec(stmt)
         session.commit()
 
-    print(f"Removed {result.rowcount} rooms")
+    print(f"Removed {result.rowcount} expired universal rooms")

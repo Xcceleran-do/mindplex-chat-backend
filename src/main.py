@@ -35,12 +35,7 @@ DEFAULT_UNIVERSAL_GROUP_EXPIRY = 10 * 60
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
-
     yield
-
-    # task.cancel()
-    if os.getenv("ENV", "") != "dev":
-        SQLModel.metadata.drop_all(engine)
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(sock.router)
