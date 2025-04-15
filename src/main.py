@@ -54,6 +54,21 @@ async def remove_expired_rooms(request, call_next):
     return response
 
 
+@app.get("/users/me", response_model=User)
+async def get_me(user: Annotated[User, Depends(get_user_dep)]):
+    return user
+
+
+@app.get("/users", response_model=list[User])
+async def get_users(
+        session: Annotated[Session, Depends(get_session)],
+        user: Annotated[User, Depends(get_user_dep)]
+):
+    return session.exec(
+        select(User)
+            .where(User.id != user.id)
+    ).all()
+
 @app.get("/rooms/", response_model=list[Room])
 async def get_rooms(
     session: Annotated[Session, Depends(get_session)],

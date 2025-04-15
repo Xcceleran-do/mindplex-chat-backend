@@ -7,6 +7,49 @@ from src.main import DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from .fixtures import *
 
 
+class TestGetUsers:
+    def test_auth(self, token: dict[str, Any], client: TestClient):
+        response = client.get(
+            "/users", headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+        assert response.status_code == 200
+
+    def test_no_auth(self, token: str, client: TestClient):
+        response = client.get("/users")
+        print(response.json())
+        assert response.is_client_error
+
+    def test_get_users_empty_result(self, session: Session, client: TestClient, token: dict[str, Any]):
+        
+        response = client.get(f"/users", headers={"Authorization": f"Bearer {token}", "X-Username": "dave"})
+        
+        assert response.status_code == 200
+        assert response.json() == []
+
+
+
+class TestGetMe:
+    def test_auth(self, token: dict[str, Any], client: TestClient):
+        response = client.get(
+            "/users/me", headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+        assert response.status_code == 200
+
+    def test_no_auth(self, client: TestClient):
+        response = client.get("/users/me")
+        assert response.is_client_error
+
+    def test_valid_me(self, token: dict[str, Any], client: TestClient):
+        response = client.get(
+            "/users/me", headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+        print(response.json())
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["remote_id"] == "dave"
+
+
 class TestCreateRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient):
         response = client.post(
