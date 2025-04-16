@@ -117,20 +117,21 @@ async def create_room(
     session: Annotated[Session, Depends(get_session)],
 ):
 
-    # await remove_expired_rooms_once(60)
-
     if room.room_type == RoomType.PRIVATE:
         if len(room.participants) == 0 or len(room.participants) > 1:
             raise HTTPException(
-                status_code=400, detail="Private room must have exactly one participant"
+                status_code=400,
+                detail="Private room must have exactly one participant"
             )
     try:
         room_dict = room.model_dump()
         participants = room_dict.pop("participants")
+        room_dict["participants"] = []
 
         for participant in participants:
             try:
-                user = await User.from_remote_or_db(participant, session)
+                remote_user = await User.from_remote_or_db(participant, session)
+                room_dict["participants"].append(remote_user)
             except UserNotFoundException:
                 raise HTTPException(status_code=400, detail="Participant not found")
 
