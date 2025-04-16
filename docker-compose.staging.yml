@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
-    command: fastapi dev ./src/main.py --port 80 --host 0.0.0.0
+    command: fastapi run ./src/main.py --port 80 --host 0.0.0.0
     volumes:
       - .:/src
     ports:
@@ -23,7 +23,5 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
 volumes:
   postgres_data:

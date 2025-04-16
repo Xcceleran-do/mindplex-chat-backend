@@ -3,10 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError, model_validator
 from fastapi import WebSocket
-from .dependencies import get_session, get_user, get_user_from_qp_dep
-from .models import Message, Room, RoomType, Session, User, engine
+from .dependencies import get_session, get_user_from_qp_dep
+from .models import Message, Room, RoomType, Session, User
 import dotenv
-import json
 
 dotenv.load_dotenv()
 

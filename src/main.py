@@ -1,9 +1,10 @@
 import os
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import (
     FastAPI,
     HTTPException,
     Depends,
+    Query,
 )
 from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
@@ -25,7 +26,9 @@ from .models import (
     engine,
 )
 from .tasks import remove_expired_rooms_once
+from .filters import RoomFilter
 from datetime import datetime, timedelta
+from fastapi_filter import FilterDepends, with_prefix
 
 dotenv.load_dotenv()
 
@@ -59,39 +62,48 @@ async def get_me(user: Annotated[User, Depends(get_user_dep)]):
     return user
 
 
-@app.get("/users", response_model=list[User])
+@app.get("/users/{username}", response_model=User)
 async def get_users(
         session: Annotated[Session, Depends(get_session)],
-        user: Annotated[User, Depends(get_user_dep)]
+        user: Annotated[User, Depends(get_user_dep)],
+        username: str
 ):
-    return session.exec(
-        select(User)
-            .where(User.id != user.id)
-    ).all()
+    query = select(User).where(User.id != user.id, User.remote_id == username)
+    try:
+        return session.exec(query).one()
+    except:
+        raise HTTPException(status_code=404, detail="User not found")
+
 
 @app.get("/rooms/", response_model=list[Room])
 async def get_rooms(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
-    private: bool = False,
-    owned: bool = False,
+    filter: RoomFilter = FilterDepends(RoomFilter), 
+    participant__id: Annotated[Optional[str], Query()] = None,
+    participant__remote_id: Annotated[Optional[str], Query()] = None
 ):
-    # await remove_expired_rooms_once(5)
+    print("user_id: ", user.id)
 
     query = (
         select(Room)
+        .join(
+            User,
+            User.id == Room.owner_id,
+            # isouter=True
+        )
+        .join(
+            RoomParticipantLink,
+            RoomParticipantLink.room_id == Room.id,
+            isouter=True
+        )
         .where(
+            # must be public or recently interacted
             or_(
                 Room.last_interacted > datetime.now() - timedelta(seconds=DEFAULT_UNIVERSAL_GROUP_EXPIRY),
                 Room.room_type == RoomType.PRIVATE
-            )
-        )
-    )
-
-    query = (
-        query
-        .join(RoomParticipantLink, isouter=True)
-        .where(
+            ),
+            # must be owner or participant
             or_(
                 Room.owner_id == user.id,
                 RoomParticipantLink.user_id == user.id,
@@ -99,10 +111,11 @@ async def get_rooms(
         )
     )
 
-    if private:
-        query = query.where(Room.room_type == RoomType.PRIVATE)
-    if owned:
-        query = query.where(Room.owner_id == user.id)
+    # add participant filters
+    if participant__id:
+        query = query.where(RoomParticipantLink.user_id == participant__id)
+
+    query = filter.filter(query)
 
     rooms = session.exec(query).all()
 

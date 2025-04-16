@@ -136,6 +136,72 @@ def unexpired_rooms_fixture(session: Session, users: list[User]):
 
     return [room, room2, room3]
     
+@pytest.fixture(name="private_rooms")
+def private_rooms_fixture(session: Session, users: list[User]):
+    assert users[0].id
+    room = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE)
+    room2 = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE)
+    room3 = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE)
+    session.add(room)
+    session.add(room2)
+    session.add(room3)
+    session.commit()
+
+    return [room, room2, room3]
+
+@pytest.fixture(name="public_rooms")
+def public_rooms_fixture(session: Session, users: list[User]):
+    assert users[0].id
+    room = Room(owner_id=users[0].id)
+    room2 = Room(owner_id=users[0].id)
+    room3 = Room(owner_id=users[0].id)
+    session.add(room)
+    session.add(room2)
+    session.add(room3)
+    session.commit()
+
+    return [room, room2, room3]
+
+@pytest.fixture(name="dave_owned_rooms")
+def dave_owned_rooms_fixture(session: Session, users: list[User]):
+    assert users[0].id
+    room = Room(owner_id=users[0].id)
+    room2 = Room(owner_id=users[0].id)
+    room3 = Room(owner_id=users[0].id)
+    session.add(room)
+    session.add(room2)
+    session.add(room3)
+    session.commit()
+
+    return [room, room2, room3]
+
+@pytest.fixture(name="dave_participated_rooms")
+def dave_participated_rooms_fixture(session: Session, users: list[User]):
+    assert users[1].id and users[2].id
+
+    room = Room(owner_id=users[1].id, participants=[users[0], users[2]])
+    room2 = Room(owner_id=users[1].id, participants=[users[0]])
+    room3 = Room(owner_id=users[2].id, participants=[users[0], users[1]])
+    session.add(room)
+    session.add(room2)
+    session.add(room3)
+    session.commit()
+
+    return [room, room2, room3]
+
+
+@pytest.fixture(name="dave_unlinked_rooms")
+def dave_unlinked_rooms_fixture(session: Session, users: list[User]):
+    assert users[1].id and users[2].id
+    room = Room(owner_id=users[1].id)
+    room2 = Room(owner_id=users[2].id)
+    room3 = Room(owner_id=users[1].id)
+    session.add(room)
+    session.add(room2)
+    session.add(room3)
+    session.commit()
+
+    return [room, room2, room3]
 
 @pytest.fixture(name="messages")
 def message_fixture(session: Session, users: list[User], rooms: list[Room]):

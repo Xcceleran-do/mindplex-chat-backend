@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { testUsers } from '$lib/';
-import { getRooms } from '$lib/api';
+import { getRooms, getRoomByUsername } from '$lib/api';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	// Get query parameter
@@ -16,7 +16,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		throw redirect(302, '/');
 	}
 
-	let currentUserRooms = await getRooms(parentData.user.token, parentData.user.username)
+	let privateRoom 
 
 	console.log("currentUserRooms: ", currentUserRooms)
 

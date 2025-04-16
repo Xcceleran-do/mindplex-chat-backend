@@ -17,7 +17,7 @@ import secrets
 
 
 # engine = create_engine("sqlite:///mindplex-chat.db")
-engine = create_engine(os.environ.get("DATABASE_URL"))
+engine = create_engine(os.environ.get("DATABASE_URL", ""))
 
 
 # Helpers

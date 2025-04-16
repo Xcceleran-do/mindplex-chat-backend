@@ -8,24 +8,55 @@ from .fixtures import *
 
 
 class TestGetUsers:
-    def test_auth(self, token: dict[str, Any], client: TestClient):
+    def test_auth(self, token: dict[str, Any], client: TestClient, users: list[User]):
+        username = users[1].remote_id
         response = client.get(
-            "/users", headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+            f"/users/{username}",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Username": "dave"
+            }
         )
         assert response.status_code == 200
 
     def test_no_auth(self, token: str, client: TestClient):
-        response = client.get("/users")
+        response = client.get("/users/dave")
         print(response.json())
         assert response.is_client_error
 
-    def test_get_users_empty_result(self, session: Session, client: TestClient, token: dict[str, Any]):
-        
-        response = client.get(f"/users", headers={"Authorization": f"Bearer {token}", "X-Username": "dave"})
-        
-        assert response.status_code == 200
-        assert response.json() == []
+    def test_get_user_by_self_username(self, client: TestClient, token: str):
+        response = client.get(
+            f"/users/dave",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Username": "dave"
+            }
+        )
 
+        assert response.status_code == 404
+    
+    def test_get_user_by_valid_username(self, client: TestClient, token: str, users: list[User]):
+        username = users[1].remote_id
+        response = client.get(
+            f"/users/{username}",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Username": "dave"
+            }
+        )
+        assert response.status_code == 200
+        assert response.json()["remote_id"] == username 
+
+
+    def test_get_user_by_invalid_username(self, client: TestClient, token: dict[str, Any]):
+        response = client.get(
+            f"/users/invalid_username",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Username": "dave"
+            }
+        )
+        assert response.is_client_error
 
 
 class TestGetMe:
@@ -126,6 +157,125 @@ class TestCreateRoom:
         assert response.status_code == 400
 
 
+class TestGetRooms:
+    def test_auth(self, token: dict[str, Any], client: TestClient):
+        response = client.get(
+            "/rooms/", headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+        assert response.status_code == 200
+
+    def test_no_auth(self, client: TestClient):
+        response = client.get("/rooms/", headers={"Authorization": "", "X-Username": "dave"})
+        print("response status: ", response.status_code)
+        assert response.status_code == 401
+
+    def test_rooms_filter_room_type(self, token: str, client: TestClient, public_rooms, private_rooms):
+        response = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"} ,
+            params={"room_type": "private"}
+        )
+
+        assert response.status_code == 200
+        data = response.json() 
+
+        assert len(data) == len(private_rooms)
+
+        for room in data:
+            assert room["id"] in [room.id for room in private_rooms]
+
+        response2 = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"} ,
+            params={"room_type": "universal"}
+        )
+
+        assert response2.status_code == 200
+        data2 = response2.json() 
+
+        assert len(data2) == len(public_rooms)
+
+        for room in data2:
+            assert room["id"] in [room.id for room in public_rooms]
+    
+    def test_rooms_filter_owner__id(
+            self,
+            token: str,
+            client: TestClient,
+            users,
+            dave_owned_rooms,
+            dave_participated_rooms,
+            dave_unlinked_rooms
+    ):
+        response = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"owner__id": users[0].id}
+        )
+        # print("users: ", users[0].id)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == len(dave_owned_rooms)
+
+
+        for room in data:
+            assert room["id"] in [room.id for room in dave_owned_rooms]
+            assert room["id"] not in [room.id for room in dave_participated_rooms]
+            assert room["id"] not in [room.id for room in dave_unlinked_rooms]
+
+    
+
+    def test_rooms_filter_owner__remote_id(
+            self,
+            token: str,
+            client: TestClient,
+            users,
+            dave_owned_rooms,
+            dave_participated_rooms,
+            dave_unlinked_rooms
+    ):
+        response = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"owner__remote_id": "dave"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == len(dave_owned_rooms)
+
+        for room in data:
+            assert room["id"] in [room.id for room in dave_owned_rooms]
+            assert room["id"] not in [room.id for room in dave_participated_rooms]
+            assert room["id"] not in [room.id for room in dave_unlinked_rooms]
+
+
+    def test_rooms_filter_participants__user_id(
+        self,
+        token: str,
+        client: TestClient,
+        users,
+        dave_owned_rooms,
+        dave_participated_rooms,
+        dave_unlinked_rooms
+    ):
+        response = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"participant__id": users[0].id}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == len(dave_participated_rooms)
+
+        for room in data:
+            assert room["id"] in [room.id for room in dave_participated_rooms]
+            assert room["id"] not in [room.id for room in dave_owned_rooms]
+            assert room["id"] not in [room.id for room in dave_unlinked_rooms]
+
+
 class TestGetRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
         response = client.get(
@@ -201,7 +351,14 @@ class TestGetRoom:
 
         assert non_owner_user.remote_id != str(mindplex_users["dave"].username)
 
-    def test_expired_rooms(self,  token: dict[str, Any], client: TestClient, expired_rooms: list[Room], unexpired_rooms:list[Room], mindplex_users: dict[str, MindplexUser]):
+    def test_expired_rooms(
+            self,
+            token: dict[str, Any],
+            client: TestClient,
+            expired_rooms: list[Room],
+            unexpired_rooms:list[Room],
+            mindplex_users: dict[str, MindplexUser]
+    ):
         response = client.get(
             f"/rooms",
             headers={
