@@ -1,8 +1,8 @@
 from typing import Any
 from fastapi.testclient import TestClient
-from sqlmodel import select
+from sqlmodel import or_, select
 
-from src.models import User
+from src.models import RoomParticipantLink, User
 from src.main import DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from .fixtures import *
 
@@ -50,13 +50,25 @@ class TestGetUsers:
 
     def test_get_user_by_invalid_username(self, client: TestClient, token: dict[str, Any]):
         response = client.get(
-            f"/users/invalid_username",
+            f"/users/invalid_usernameabc123",
             headers={
                 "Authorization": f"Bearer {token}",
                 "X-Username": "dave"
             }
         )
         assert response.is_client_error
+    
+    def test_get_user_by_mp_username(self, client: TestClient, token: dict[str, Any]):
+        response = client.get(
+            f"/users/ivan2",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Username": "dave"
+            }
+        )
+        data = response.json()
+        assert response.status_code == 200
+        assert data["remote_id"] == "ivan2" 
 
 
 class TestGetMe:
@@ -275,16 +287,63 @@ class TestGetRooms:
             assert room["id"] not in [room.id for room in dave_owned_rooms]
             assert room["id"] not in [room.id for room in dave_unlinked_rooms]
 
+    def test_rooms_filter_peer__id(
+        self,
+        token: str,
+        client: TestClient,
+        users,
+        dave_unlinked_rooms,
+        dave_1_private_room,
+        dave_2_private_room,
+
+    ):
+        response = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"peer__id": users[1].id}
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        print("data: ", [room["id"] for room in data])
+        print("dave_unlinked_rooms: ", [room.id for room in dave_unlinked_rooms])
+
+        assert len(data) == len(dave_1_private_room)
+        for room in data:
+            assert room["id"] in [room.id for room in dave_1_private_room]
+            assert room["id"] not in [room.id for room in dave_2_private_room]
+
+        response2 = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"peer__id": users[2].id}
+        )
+
+        assert response2.status_code == 200
+        data = response2.json()
+
+
+        assert len(data) == len(dave_2_private_room)
+
+
 
 class TestGetRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
         response = client.get(
-            f"/rooms/{rooms[0].id}", headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"}
+            f"/rooms/{rooms[0].id}",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Username": "test_user"
+            }
         )
         assert response.status_code != 401
 
     def test_no_auth(self, client: TestClient, rooms: list[Room]):
-        response = client.get(f"/rooms/{rooms[0].id}", headers={"Authorization": "", "X-Username": "test_user"})
+        response = client.get(f"/rooms/{rooms[0].id}", headers={
+            "Authorization": "",
+            "X-Username": "test_user"
+        }
+    )
         assert response.status_code == 401
 
     def test_non_existing_room(self, token: dict[str, Any], client: TestClient):

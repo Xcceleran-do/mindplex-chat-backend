@@ -100,6 +100,9 @@ class User(SQLModel, table=True):
         try:
             remote_user = await mpx_sdk.get_user(remote_id)
             user = User(remote_id=await mpx_sdk.get_user_id(remote_user))
+            session.add(user)
+            session.commit()
+            session.refresh(user)
             return user
         except MindplexApiException:
             # TODO: log error

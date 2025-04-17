@@ -12,35 +12,6 @@ dotenv.load_dotenv()
 class MindplexApiException(Exception):
     pass
 
-"""
-    {
-        "user_id": 13,
-        "username": "esubalewA",
-        "first_name": "Esubalew",
-        "last_name": "Amenu",
-        "theme": "light",
-        "avatar_url": "https://secure.gravatar.com/avatar/5e9ebd86529dcac05164aacedf030ac7?s=96&d=mm&r=g",
-        "mpxr": 13.26679,
-        "is_following": false,
-        "is_friends": false,
-        "date_of_birth": "",
-        "age": 27,
-        "gender": "Other",
-        "education": {
-            "id": "37",
-            "educational_background": "Master\\&#039;s degree                                                "
-        },
-        "interest": [],
-        "social_media": [
-            "https://twitter.com/EsubalewA"
-        ],
-        "biography": "lkdsjkjsdf",
-        "followings": 3,
-        "followers": 4,
-        "friends": 0
-    }
-"""
-
 class MindplexUser(BaseModel):
     """Mindplex data necessary for the chat app"""
     username: str

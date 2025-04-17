@@ -11,6 +11,8 @@ from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, and_, or_, select
 import dotenv
+
+from src.api import Mindplex, MindplexApiException
 from .dependencies import get_session, get_user_dep
 from . import sock
 from .models import (
@@ -68,10 +70,9 @@ async def get_users(
         user: Annotated[User, Depends(get_user_dep)],
         username: str
 ):
-    query = select(User).where(User.id != user.id, User.remote_id == username)
     try:
-        return session.exec(query).one()
-    except:
+        return await User.from_remote_or_db(username, session)
+    except UserNotFoundException:
         raise HTTPException(status_code=404, detail="User not found")
 
 
@@ -81,7 +82,7 @@ async def get_rooms(
     user: Annotated[User, Depends(get_user_dep)],
     filter: RoomFilter = FilterDepends(RoomFilter), 
     participant__id: Annotated[Optional[str], Query()] = None,
-    participant__remote_id: Annotated[Optional[str], Query()] = None
+    peer__id: Annotated[Optional[str], Query()] = None,
 ):
     print("user_id: ", user.id)
 
@@ -111,13 +112,25 @@ async def get_rooms(
         )
     )
 
-    # add participant filters
-    if participant__id:
-        query = query.where(RoomParticipantLink.user_id == participant__id)
+    if participant__id is not None:
+        query = query.where(RoomParticipantLink.user_id == participant__id).distinct()
 
     query = filter.filter(query)
 
     rooms = session.exec(query).all()
+
+    # in memory filters, have low cost but change back to sql when possible for efficiency
+    if peer__id is not None:
+        rooms = [
+            room for room in rooms if (
+                (
+                    peer__id in [participant.id for participant in room.participants]
+                    or peer__id == room.owner_id
+                )
+                and room.room_type == RoomType.PRIVATE
+            )
+        ]
+
 
     return rooms
 

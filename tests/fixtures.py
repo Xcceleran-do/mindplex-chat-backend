@@ -203,6 +203,36 @@ def dave_unlinked_rooms_fixture(session: Session, users: list[User]):
 
     return [room, room2, room3]
 
+@pytest.fixture(name="dave_1_private_room")
+def dave_1_private_room_fixture(session: Session, users: list[User]):
+    assert users[1].id and users[0].id
+    room = Room(owner_id=users[0].id, participants=[users[1]], room_type=RoomType.PRIVATE)
+    session.add(room)
+    session.commit()
+
+    return [room]
+
+@pytest.fixture(name="dave_2_private_room")
+def dave_2_private_room_fixture(session: Session, users: list[User]):
+    assert users[2].id and users[0].id
+    room = Room(owner_id=users[2].id, participants=[users[0]], room_type=RoomType.PRIVATE)
+    session.add(room)
+    session.commit()
+
+    return [room]
+
+
+@pytest.fixture(name="dave_private_rooms")
+def dave_private_rooms_fixture(session: Session, users: list[User]):
+    assert users[1].id and users[2].id and users[0].id
+    room = Room(owner_id=users[0].id, participants=[users[1]], room_type=RoomType.PRIVATE)
+    room2 = Room(owner_id=users[2].id, participants=[users[0]], room_type=RoomType.PRIVATE)
+    session.add(room)
+    session.add(room2)
+    session.commit()
+
+    return [room, room2]
+
 @pytest.fixture(name="messages")
 def message_fixture(session: Session, users: list[User], rooms: list[Room]):
     message = Message(text="test message", owner=users[0])
