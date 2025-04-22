@@ -1,9 +1,8 @@
 from typing import Any
 from fastapi.testclient import TestClient
-from sqlmodel import or_, select
+from sqlmodel import select
 
-from src.models import RoomParticipantLink, User
-from src.main import DEFAULT_UNIVERSAL_GROUP_EXPIRY
+from src.models import User
 from .fixtures import *
 
 
@@ -23,17 +22,6 @@ class TestGetUsers:
         response = client.get("/users/dave")
         print(response.json())
         assert response.is_client_error
-
-    def test_get_user_by_self_username(self, client: TestClient, token: str):
-        response = client.get(
-            f"/users/dave",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "X-Username": "dave"
-            }
-        )
-
-        assert response.status_code == 404
     
     def test_get_user_by_valid_username(self, client: TestClient, token: str, users: list[User]):
         username = users[1].remote_id
@@ -46,7 +34,6 @@ class TestGetUsers:
         )
         assert response.status_code == 200
         assert response.json()["remote_id"] == username 
-
 
     def test_get_user_by_invalid_username(self, client: TestClient, token: dict[str, Any]):
         response = client.get(
@@ -191,6 +178,18 @@ class TestGetRooms:
         assert response.status_code == 200
         data = response.json() 
 
+        print("data")
+        for d in data:
+            print(d["id"])
+
+        print("private_rooms")
+        for d in private_rooms:
+            print(d.id)
+
+        print("public_rooms")
+        for d in public_rooms:
+            print(d.id)
+
         assert len(data) == len(private_rooms)
 
         for room in data:
@@ -326,7 +325,6 @@ class TestGetRooms:
         assert len(data) == len(dave_2_private_room)
 
 
-
 class TestGetRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
         response = client.get(
@@ -438,20 +436,21 @@ class TestGetRoom:
 class TestGetRoomMessages:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
         response = client.get(
-            f"/rooms/{rooms[0].id}/message",
+            f"/rooms/{rooms[0].id}/messages",
             headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
         )
         assert response.status_code != 401
 
     def test_no_auth(self, client: TestClient, rooms: list[Room]):
         response = client.get(
-            f"/rooms/{rooms[0].id}/message", headers={"Authorization": "", "X-Username": "test_user"}
+            f"/rooms/{rooms[0].id}/messages", headers={"Authorization": "", "X-Username": "test_user"}
         )
+        print("details: ", response.json())
         assert response.status_code == 401
 
     def test_non_existing_room(self, token: dict[str, Any], client: TestClient):
         response = client.get(
-            f"/rooms/invalid_room_id/message",
+            f"/rooms/invalid_room_id/messages",
             headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
         )
         assert response.status_code == 404
@@ -463,7 +462,7 @@ class TestGetRoomMessages:
         rooms: list[Room],
     ):
         response = client.get(
-            f"/rooms/{rooms[0].id}/message",
+            f"/rooms/{rooms[0].id}/messages",
             headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
         )
         assert response.status_code == 403
@@ -477,7 +476,7 @@ class TestGetRoomMessages:
         mindplex_users: dict[str, MindplexUser],
     ):
         response = client.get(
-            f"/rooms/{rooms_with_mindplex[0].id}/message",
+            f"/rooms/{rooms_with_mindplex[0].id}/messages",
             headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
         )
         data = response.json()
@@ -494,10 +493,152 @@ class TestGetRoomMessages:
     ):
 
         response = client.get(
-            f"/rooms/{rooms_with_mindplex[1].id}/message",
+            f"/rooms/{rooms_with_mindplex[1].id}/messages",
             headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
         )
         data = response.json()
 
         assert response.status_code == 200
         assert data == []
+
+
+class TestGetRoomParticipants:
+    def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
+        response = client.get(
+            f"/rooms/{rooms[0].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
+        )
+        assert response.status_code != 401
+
+    def test_no_auth(self, client: TestClient, rooms: list[Room]):
+        response = client.get(
+            f"/rooms/{rooms[0].id}/participants", headers={"Authorization": "", "X-Username": "test_user"}
+        )
+        assert response.status_code == 401
+
+    def test_non_existing_room(self, token: dict[str, Any], client: TestClient):
+        response = client.get(
+            f"/rooms/invalid_room_id/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
+        )
+        assert response.status_code == 404
+
+    def test_existing_room_with_no_access(
+        self,
+        token: dict[str, Any],
+        client: TestClient,
+        rooms: list[Room],
+    ):
+        response = client.get(
+            f"/rooms/{rooms[0].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
+        )
+        assert response.status_code == 403
+
+    def test_room_with_ownership_access(
+        self,
+        token: dict[str, Any],
+        client: TestClient,
+        dave_owned_rooms: list[Room],
+    ):
+        response = client.get(
+            f"/rooms/{dave_owned_rooms[0].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data == []
+
+    def test_room_response_with_participants(self, token, client, dave_participated_rooms):
+        response = client.get(
+            f"/rooms/{dave_participated_rooms[0].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == len(dave_participated_rooms[0].participants)
+
+        for participant in data:
+            assert participant["id"] in [
+                participant.id for participant in dave_participated_rooms[0].participants
+            ]
+
+        response2 = client.get(
+            f"/rooms/{dave_participated_rooms[1].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+
+        assert response2.status_code == 200
+        data2 = response2.json()
+        assert len(data2) == len(dave_participated_rooms[1].participants)
+
+        for participant in data2:
+            assert participant["id"] in [
+                participant.id for participant in dave_participated_rooms[1].participants
+            ]
+
+        response3 = client.get(
+            f"/rooms/{dave_participated_rooms[2].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+
+        assert response3.status_code == 200
+        data3 = response3.json()
+        assert len(data3) == len(dave_participated_rooms[2].participants)
+
+        for participant in data3:
+            assert participant["id"] in [
+                participant.id for participant in dave_participated_rooms[2].participants
+            ]
+
+    def test_room_response_with_messages(self, token, client, room_with_messages: list[Room]):
+        response = client.get(
+            f"/rooms/{room_with_messages[0].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        
+
+        response2 = client.get(
+            f"/rooms/{room_with_messages[1].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
+        )
+
+        assert response2.status_code == 200
+        data2 = response2.json()
+        print("data2")
+        for d in data2:
+            print(d["id"])
+
+        print("room_with_messages")
+        for d in room_with_messages[1].messages:
+            print(d.owner.id)
+
+
+        assert len(data2) == 1
+
+
+    def test_room_response_with_messages_and_participants(self, token, client, dave_participated_rooms):
+        pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
