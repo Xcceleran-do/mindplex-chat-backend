@@ -2,13 +2,18 @@ from datetime import datetime, timedelta
 import uuid
 import pytest
 from src.api import Mindplex, MindplexUser
-from src.models import RoomType, SQLModel, Room, User, Message, engine
-from sqlmodel import create_engine, Session
+from src.models import RoomType, SQLModel, Room, User, Message, engine, Session
 from src.main import app, DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import sessionmaker
 import httpx
 import pytest_asyncio
+import os
 
+
+@pytest.fixture(autouse=True)
+def set_env_vars(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "test")
 
 @pytest.fixture
 def client():
@@ -18,7 +23,6 @@ def client():
 
 @pytest.fixture(name="engine")
 def engine_fixture():
-    # Create an in-memory SQLite database
     SQLModel.metadata.create_all(engine)
     yield engine
     SQLModel.metadata.drop_all(engine)
@@ -110,6 +114,7 @@ async def rooms_with_mindplex_users_fixture(
     
     return [room, room2, room3]
 
+
 @pytest.fixture(name="expired_rooms")
 def expired_rooms_fixture(session: Session, users: list[User]):
     assert users[0].id
@@ -122,6 +127,7 @@ def expired_rooms_fixture(session: Session, users: list[User]):
     session.commit()
 
     return [room, room2, room3]
+
 
 @pytest.fixture(name="unexpired_rooms")
 def unexpired_rooms_fixture(session: Session, users: list[User]):
@@ -136,6 +142,7 @@ def unexpired_rooms_fixture(session: Session, users: list[User]):
 
     return [room, room2, room3]
     
+
 @pytest.fixture(name="private_rooms")
 def private_rooms_fixture(session: Session, users: list[User]):
     assert users[0].id
@@ -148,6 +155,7 @@ def private_rooms_fixture(session: Session, users: list[User]):
     session.commit()
 
     return [room, room2, room3]
+
 
 @pytest.fixture(name="public_rooms")
 def public_rooms_fixture(session: Session, users: list[User]):
@@ -162,6 +170,7 @@ def public_rooms_fixture(session: Session, users: list[User]):
 
     return [room, room2, room3]
 
+
 @pytest.fixture(name="dave_owned_rooms")
 def dave_owned_rooms_fixture(session: Session, users: list[User]):
     assert users[0].id
@@ -174,6 +183,7 @@ def dave_owned_rooms_fixture(session: Session, users: list[User]):
     session.commit()
 
     return [room, room2, room3]
+
 
 @pytest.fixture(name="dave_participated_rooms")
 def dave_participated_rooms_fixture(session: Session, users: list[User]):
@@ -203,6 +213,7 @@ def dave_unlinked_rooms_fixture(session: Session, users: list[User]):
 
     return [room, room2, room3]
 
+
 @pytest.fixture(name="dave_1_private_room")
 def dave_1_private_room_fixture(session: Session, users: list[User]):
     assert users[1].id and users[0].id
@@ -211,6 +222,7 @@ def dave_1_private_room_fixture(session: Session, users: list[User]):
     session.commit()
 
     return [room]
+
 
 @pytest.fixture(name="dave_2_private_room")
 def dave_2_private_room_fixture(session: Session, users: list[User]):
@@ -232,6 +244,7 @@ def dave_private_rooms_fixture(session: Session, users: list[User]):
     session.commit()
 
     return [room, room2]
+
 
 @pytest.fixture(name="messages")
 def message_fixture(session: Session, users: list[User], rooms: list[Room]):
@@ -256,6 +269,30 @@ def message_fixture(session: Session, users: list[User], rooms: list[Room]):
         "1": [message4, message5],
         "2": [message6, message7],
     }
+
+@pytest_asyncio.fixture(name="room_with_messages")
+async def room_with_messages_fixture(session: Session, messages: dict[str, list[Message]], users: list[User]):
+    assert users[0].id
+    room1 = Room(owner_id=users[0].id)
+    session.commit()
+    await room1.add_message(messages["0"][0])
+    await room1.add_message(messages["1"][0])
+    await room1.add_message(messages["2"][0])
+    await room1.add_message(messages["0"][1])
+
+    room2 = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE, participants=[users[1]])
+    await room2.add_message(messages["0"][1])
+    await room2.add_message(messages["1"][1])
+    await room2.add_message(messages["0"][1])
+
+
+    session.add(room1)
+    session.add(room2)
+    session.commit()
+
+    return [room1, room2]
+
+
 
 
 @pytest.fixture(name="token")

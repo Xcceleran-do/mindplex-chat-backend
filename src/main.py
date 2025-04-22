@@ -214,7 +214,42 @@ async def update_room_interaction(
 
     return room
 
-@app.get("/rooms/{room_id}/message", response_model=list[Message])
+
+@app.get("/rooms/{room_id}/participants", response_model=list[User])
+async def get_room_participants(
+    room_id: str,
+    session: Annotated[Session, Depends(get_session)],
+    user: Annotated[User, Depends(get_user_dep)],
+):
+
+    room = await Room.get_by_id(room_id, session, raise_exc=False)
+
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    if not await room.is_in_room(user):
+        raise HTTPException(
+            status_code=403, detail="User does not have access to this room"
+        )
+
+    # get all message senders
+    # TODO: currently in memory, use sql
+    message_senders = []
+    if room.room_type == RoomType.UNIVERSAL:
+        message_senders_ = [message.owner for message in room.messages if message.owner != user]
+        for message_sender in message_senders_:
+            if message_sender not in message_senders:
+                message_senders.append(message_sender)
+
+    assert room is not None
+    all_participants = room.participants
+    all_participants.extend(message_senders)
+
+    print("all_participants: ", all_participants)
+
+    return all_participants
+
+@app.get("/rooms/{room_id}/messages", response_model=list[Message])
 async def get_room_messages(
     room_id: str,
     session: Annotated[Session, Depends(get_session)],

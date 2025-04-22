@@ -13,18 +13,55 @@ from sqlmodel import (
     select,
 )
 from .api import MindplexUser, Mindplex, MindplexApiException
+import psycopg2
+from psycopg2 import OperationalError
 import secrets
+import time
 
 
-# engine = create_engine("sqlite:///mindplex-chat.db")
-engine = create_engine(os.environ.get("DATABASE_URL", ""))
 
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
+POSTGRES_DB = os.environ.get("POSTGRES_DB")
+POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
+POSTGRES_USER = os.environ.get("POSTGRES_USER")
 
+TEST_POSTGRES_PASSWORD = os.environ.get("TEST_POSTGRES_PASSWORD")
+TEST_POSTGRES_HOST = os.environ.get("TEST_POSTGRES_HOST")
+TEST_POSTGRES_DB = os.environ.get("TEST_POSTGRES_DB")
+TEST_POSTGRES_PORT = os.environ.get("TEST_POSTGRES_PORT")
+TEST_POSTGRES_USER = os.environ.get("TEST_POSTGRES_USER")
+
+if os.environ["ENVIRONMENT"] == "test": 
+    engine = create_engine(f"postgresql://{TEST_POSTGRES_USER}:{TEST_POSTGRES_PASSWORD}@{TEST_POSTGRES_HOST}:{TEST_POSTGRES_PORT}/{TEST_POSTGRES_DB}")
+else:
+    engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}")
+
+print("engine", engine)
 # Helpers
+
+def wait_for_postgres(host, port, db, user, password, timeout=30):
+    start = time.time()
+    while True:
+        try:
+            conn = psycopg2.connect(
+                dbname=db,
+                user=user,
+                password=password,
+                host=host,
+                port=port,
+            )
+            conn.close()
+            break
+        except OperationalError as e:
+            if time.time() - start > timeout:
+                raise e
+            print("Waiting for PostgreSQL...")
+            time.sleep(1)
+
 def generate_id():
     # TODO: check for id duplication
     return secrets.token_hex(8)
-
 
 # Exceptions
 class RoomValidationException(Exception):
@@ -225,3 +262,4 @@ class Message(SQLModel, table=True):
 if __name__ == "__main__":
     # Run migrations here
     SQLModel.metadata.create_all(engine)
+
