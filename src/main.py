@@ -106,6 +106,7 @@ async def get_rooms(
             ),
             # must be owner or participant
             or_(
+                Room.room_type == RoomType.UNIVERSAL,
                 Room.owner_id == user.id,
                 RoomParticipantLink.user_id == user.id,
             )
@@ -177,9 +178,6 @@ async def get_room(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
-
-    # await remove_expired_rooms_once(60)
-
     try:
         room = await Room.get_by_id(room_id, session, raise_exc=True)
         assert room

@@ -214,7 +214,11 @@ class Room(RoomBase, table=True):
         Returns:
             bool: True if the user is in the room
         """
-        return user in self.participants or user.id == self.owner_id
+        return (
+                user in self.participants 
+                or user.id == self.owner_id 
+                or self.room_type == RoomType.UNIVERSAL
+        )
 
     @classmethod
     async def get_by_id(
