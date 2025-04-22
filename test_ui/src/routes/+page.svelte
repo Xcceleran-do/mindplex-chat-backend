@@ -4,7 +4,7 @@
 
 </script>
 
-<h2>Please select a user</h2>
+<h2>Please select a user to login as</h2>
 <ol>
 	{#each data.allUsers as user }
 		<li>

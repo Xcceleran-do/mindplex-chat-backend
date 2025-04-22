@@ -1,29 +1,25 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { testUsers } from '$lib/';
-import { getRooms, getRoomByUsername } from '$lib/api';
+import { getUserByUsername, getOrCreateRoom, getRoomParticipants, getRoom } from '$lib/api';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	// Get query parameter
 	
 	let parentData = await parent()
 
-	const username = params.user;
-	const remoteUser = params.room;
-
-	if (parentData.user == null) {
-		// redirect to home page
+	if (parentData.user == null) 
 		throw redirect(302, '/');
-	}
 
-	let privateRoom 
+	const room = await getRoom(parentData.token, parentData.username, params.room);
 
-	console.log("currentUserRooms: ", currentUserRooms)
+	if (room == undefined)
+		throw redirect(302, `/${parentData.username}`);
+
+	const participants = await getRoomParticipants(parentData.token, parentData.username, room.id);
 
 	return {
-		remoteUser,
-		currentUserRooms
+		currentRoom: room,
+		currentRoomParticipants: participants
 	}
-
 };
 

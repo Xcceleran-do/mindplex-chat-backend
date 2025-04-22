@@ -1,8 +1,23 @@
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 import { testUsers } from '$lib/';
+import { getMe, getRooms } from '$lib/api';
 
 const AUTH_BACKEND_HOST = "staging.mindplex.ai"
+
+async function createRoom() {
+	let remoteUser;
+	try {
+		remoteUser = await getUserByUsername(data.token, data.username, participant)
+	} catch (e) {
+		console.log(e)
+	}
+	if (remoteUser === undefined)
+		throw new Error("Remote user not found")
+
+	let room = await getOrCreatePrivateRoom(data.token, data.username, remoteUser)
+
+}
 
 async function auth_user(username: string) {
 	// get password or null/undefined
@@ -45,15 +60,24 @@ export const load: LayoutServerLoad = async ({ url, params }) => {
 
 	const token = await auth_user(username as string);
 
-	if (token !== null ) {
-		user = {
-			username: username as string,
-			token: token
-		}
-	};
+	if (token === null ) 
+		throw redirect(302, '/');
+
+	let chatUser = await getMe(token, username)
+	let privateRooms = await getRooms(token, username, "room_type=private")
+	let universalRooms = await getRooms(token, username, "room_type=universal")
+
+	if (chatUser === undefined)
+		throw redirect(302, '/');
 
 	return {
-		user: user,
+		token,
+		username,
+		user: chatUser,
+		rooms: {
+			private: privateRooms,
+			universal: universalRooms
+		}
 	};
 };
 

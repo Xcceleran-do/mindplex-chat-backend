@@ -2,29 +2,72 @@
 	// get test users from server
 
 	import type { PageProps } from './$types';
-	import { getRooms, sendMessage, createSocket } from '$lib/api';
+	import {  BACKEND_HOST  } from '$lib/api';
+	import { browser } from '$app/environment';
 
 	let { data }: PageProps = $props();
 
-	let user = $state(data.user);
-	//let room = $state(data.remoteUser);
-	//let room;
-	//if (data.remoteUser) {
-	//
-	//}
+	let ws: WebSocket | undefined = undefined;
+	let messages: HTMLPreElement
+	let inp: string = $state("")
 
-	let messages: HTMLDivElement
-	let inp: HTMLInputElement
+	if (browser) {
+		ws = new WebSocket(
+			`ws://${BACKEND_HOST}/ws/rooms/${data.currentRoom.id}?token=${data.token}&username=${data.username}`
+		);
+
+		ws.onopen = () => {
+			console.log("Connected to WebSocket server");
+		};
+
+		ws.onerror = (e) => {
+			console.log(e)
+		};
+
+		ws.onmessage = (event) => {
+			const messagesDiv = document.getElementById("messages");
+			const message = document.createElement("p");
+			console.log("Received: ", event.data)
+			message.textContent = "Received: " + JSON.stringify(event.data);
+			messagesDiv?.appendChild(message);
+		};
+
+		ws.onerror = (error) => {
+			console.error("WebSocket error:", error);
+		};
+
+		ws.onclose = () => {
+			console.log("WebSocket connection closed");
+		};
+
+	}
+
+
+	function sendMessage() {
+		let value = inp;
+		if (value?.trim() !== "") {
+			let msg = {
+				type: "text",
+				message: value,
+				sender: null
+			}
+			if (ws !== undefined) {
+				ws.send(JSON.stringify(msg));
+				console.log("Sent: ", value)
+			} else {
+				console.log("WebSocket not connected")
+			}
+		}
+	}
 
 </script>
 
 <div>
+	<a href="/{data.username}">&lt back</a>
 	<h2>WebSocket Chat Test</h2>
-	<h2>Hey {user?.username} you are chatting with</h2>
-	<div id="messages" bind:this={messages}></div>
-	<input type="text" id="messageInput" placeholder="Type a message..." bind:this={inp}>
+	<pre id="messages" bind:this={messages}></pre>
+	<input type="text" id="messageInput" placeholder="Type a message..." bind:value={inp}>
 	<button id="sendButton" onclick={sendMessage}>Send</button>
-	<button onclick={createSocket}>Connect</button>
 </div>
 
 <style>
