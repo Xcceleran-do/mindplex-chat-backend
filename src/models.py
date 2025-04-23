@@ -33,9 +33,16 @@ TEST_POSTGRES_PORT = os.environ.get("TEST_POSTGRES_PORT")
 TEST_POSTGRES_USER = os.environ.get("TEST_POSTGRES_USER")
 
 if os.environ["ENVIRONMENT"] == "test": 
-    engine = create_engine(f"postgresql://{TEST_POSTGRES_USER}:{TEST_POSTGRES_PASSWORD}@{TEST_POSTGRES_HOST}:{TEST_POSTGRES_PORT}/{TEST_POSTGRES_DB}")
+    engine = create_engine(
+        f"postgresql://{TEST_POSTGRES_USER}:{TEST_POSTGRES_PASSWORD}@{TEST_POSTGRES_HOST}:{TEST_POSTGRES_PORT}/{TEST_POSTGRES_DB}",
+        pool_size=10,
+        max_overflow=20
+   )
 else:
-    engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}")
+    engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
+        pool_size=10,
+        max_overflow=20
+   )
 
 print("engine", engine)
 # Helpers
@@ -82,8 +89,8 @@ class RoomType(str, Enum):
 
 
 class RoomParticipantLink(SQLModel, table=True):
-    user_id: str | None = Field(default=None, foreign_key="user.id", primary_key=True)
-    room_id: str | None = Field(default=None, foreign_key="room.id", primary_key=True)
+    user_id: str | None = Field(default=None, foreign_key="user.id", primary_key=True, ondelete="CASCADE")
+    room_id: str | None = Field(default=None, foreign_key="room.id", primary_key=True, ondelete="CASCADE")
 
 
 class RoomMessagesLink(SQLModel, table=True):
@@ -101,7 +108,7 @@ class User(SQLModel, table=True):
         back_populates="participants", link_model=RoomParticipantLink
     )
     owned_rooms: list["Room"] = Relationship(
-        back_populates="owner",
+        back_populates="owner", cascade_delete=True
     )
     messages: list["Message"] = Relationship(back_populates="owner")
 
@@ -174,7 +181,7 @@ class Room(RoomBase, table=True):
             RoomValidationException: if the participant is already in the room
             RoomValidationException: if the room is private and the room has > 2 participants
         """
-        if await self.is_in_room(participant):
+        if self.room_type == RoomType.PRIVATE and await self.is_in_room(participant):
             raise RoomValidationException("Participant is already in the room")
 
         if self.room_type == RoomType.PRIVATE and len(self.participants) == 1:
@@ -254,7 +261,7 @@ class Message(SQLModel, table=True):
     text: str
     created: datetime = Field(default_factory=datetime.now)
 
-    owner_id: str = Field(default=None, foreign_key="user.id")
+    owner_id: str = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
     owner: User = Relationship(back_populates="messages")
 
     # room_id: str | None = Field(default=None, foreign_key="room.id")

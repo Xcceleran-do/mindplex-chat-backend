@@ -4,7 +4,6 @@ from sqlalchemy.sql.compiler import exc
 from .fixtures import *
 
 
-
 class TestConnectionManager:
     pass
 
@@ -49,6 +48,5 @@ class TestWebSocketEndpoint:
         with client.websocket_connect(endpoint) as websocket:
             response = websocket.receive_json()
             assert response["success"] == True
-            assert response["message"]["type"] == "text"
-            assert response["message"]["message"] == "Connected to room"
+            assert response["message"]["type"] == "connected"
 

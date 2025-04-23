@@ -353,10 +353,18 @@ class TestGetRoom:
     def test_existing_room_with_no_participation_or_ownership(
         self, token: dict[str, Any], client: TestClient, rooms: list[Room]
     ):
+        # should work for public rooms
         response = client.get(
             f"/rooms/{rooms[0].id}", headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"}
         )
+        assert response.status_code == 200
+
+        # should fail for private rooms
+        response = client.get(
+            f"/rooms/{rooms[1].id}", headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"}
+        )
         assert response.status_code == 403
+
 
     def test_existing_room_with_ownership(
         self,
@@ -461,8 +469,16 @@ class TestGetRoomMessages:
         client: TestClient,
         rooms: list[Room],
     ):
+        # should work for public rooms
         response = client.get(
             f"/rooms/{rooms[0].id}/messages",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
+        )
+        assert response.status_code == 200
+
+        # should fail for private rooms
+        response = client.get(
+            f"/rooms/{rooms[1].id}/messages",
             headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
         )
         assert response.status_code == 403
@@ -529,8 +545,16 @@ class TestGetRoomParticipants:
         client: TestClient,
         rooms: list[Room],
     ):
+        # should work for public rooms
         response = client.get(
             f"/rooms/{rooms[0].id}/participants",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
+        )
+        assert response.status_code == 200
+
+        # should fail for private rooms
+        response = client.get(
+            f"/rooms/{rooms[1].id}/participants",
             headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
         )
         assert response.status_code == 403

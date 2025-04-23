@@ -47,20 +47,22 @@ class TestRoom:
         assert users[1].all_rooms() == [rooms[0], rooms[1]]
         assert users[2].all_rooms() == [rooms[0]]
 
-        # Check adding the same user twice
+        # Check adding a third user to a private room
+        await rooms[1].add_participant(users[0])
+        session.commit()
+        assert rooms[1].participants == [users[0]]
+
         exc_info = None
         with pytest.raises(RoomValidationException) as e:
             exc_info = e
-            await rooms[0].add_participant(users[0])
+            await rooms[1].add_participant(users[0])
             session.commit()
         assert exc_info
         assert exc_info.value
         assert exc_info.value.args[0] == "Participant is already in the room"
 
-        # Check adding a third user to a private room
-        await rooms[1].add_participant(users[0])
-        session.commit()
-        assert rooms[1].participants == [users[0]]
+
+        # check adding the same user twice
         exc_info = None
         with pytest.raises(RoomValidationException) as e:
             exc_info = e
@@ -104,26 +106,21 @@ class TestRoom:
     async def test_is_in_room(
         self, session: Session, users: list[User], rooms: list[Room]
     ):
-        assert await rooms[0].is_in_room(users[0])
-        assert not await rooms[0].is_in_room(users[1])
-        assert not await rooms[0].is_in_room(users[2])
+        assert await rooms[1].is_in_room(users[1])
+        assert not await rooms[1].is_in_room(users[0])
+        assert not await rooms[1].is_in_room(users[2])
 
-        await rooms[0].add_participant(users[1])
+        await rooms[1].add_participant(users[0])
         session.commit()
 
-        assert await rooms[0].is_in_room(users[0])
-        assert await rooms[0].is_in_room(users[1])
-        assert not await rooms[0].is_in_room(users[2])
+        assert await rooms[1].is_in_room(users[0])
+        assert await rooms[1].is_in_room(users[1])
+        assert not await rooms[1].is_in_room(users[2])
 
-        await rooms[0].add_participant(users[2])
-        session.commit()
-
+        # all public rooms should be accessible
         assert await rooms[0].is_in_room(users[0])
         assert await rooms[0].is_in_room(users[1])
         assert await rooms[0].is_in_room(users[2])
-
-        assert not await rooms[1].is_in_room(users[0])
-        assert await rooms[1].is_in_room(users[1])
 
     @pytest.mark.asyncio
     async def test_room_expiry(

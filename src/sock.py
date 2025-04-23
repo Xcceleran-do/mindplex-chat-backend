@@ -3,8 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError, model_validator
 from fastapi import WebSocket
+from sqlmodel import select
 from .dependencies import get_session, get_user_from_qp_dep
-from .models import Message, Room, RoomType, Session, User
+from .models import Message, Room, RoomType, Session, User, engine
 import dotenv
 
 dotenv.load_dotenv()
@@ -23,7 +24,7 @@ class ConnectionManager:
             WSResponse(
                 success=True,
                 message=WSMessage(
-                    type=WSMessageType.TEXT, message="Connected to room", sender=None
+                    type=WSMessageType.CONNECTED, message=None, sender=None
                 ),
             ).model_dump(exclude_none=True)
         )
@@ -37,7 +38,7 @@ class ConnectionManager:
         self.active_connections[room_id].remove(websocket)
 
     async def send_message(
-        self, message: "WSMessage", room_id: str, websocket: WebSocket
+        self, message: "Message", room_id: str, websocket: WebSocket
     ):
         """
         Send a message to a specific room excluding the sender.
@@ -51,16 +52,19 @@ class ConnectionManager:
         # raise Exception("Connections: ", self.active_connections)
         for connection in self.active_connections[room_id]:
             if connection != websocket:
-                await connection.send_json(message.model_dump(exclude_none=True))
+                await connection.send_json(message.model_dump_json(exclude_none=True))
 
 
 class WSMessageType(str, Enum):
     TEXT = "text"
+    CONNECTED = "connected"
+    SENT_CONFIRMATION = "sent_confirmation"
+
 
 
 class WSMessage(BaseModel):
     type: WSMessageType
-    message: str
+    message: Optional[Message | str] 
     sender: Optional[User]
 
     class Config:
@@ -80,14 +84,6 @@ class WSResponse(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
-
-    @model_validator(mode="after")
-    def check_success(cls, values):
-        if values.success:
-            assert values.message
-        else:
-            assert values.error
-        return values
 
 
 connections = ConnectionManager()
@@ -163,14 +159,22 @@ async def websocket_endpoint(
                 await websocket.send_json(response.model_dump(exclude_none=True))
                 continue
 
-            assert data.message
+            assert data.message and data.message is str
             message = Message(owner=user, text=data.message)
             await room.add_message(message)
             session.add(message)
             session.commit()
             session.refresh(message)
 
-            await connections.send_message(data, room.id, websocket)
+            await connections.send_message(message, room.id, websocket)
+            await websocket.send_json(
+                WSResponse(
+                    success=True,
+                    message=WSMessage(
+                        type=WSMessageType.SENT_CONFIRMATION, message=message, sender=user
+                    ),
+                ).model_dump(exclude_none=True)
+            )
 
     except WebSocketDisconnect:
         print("A user has disconnected: ", websocket)
