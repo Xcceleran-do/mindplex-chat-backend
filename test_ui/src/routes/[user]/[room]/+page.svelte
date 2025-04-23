@@ -15,10 +15,13 @@
 	import { Button } from "@/components/ui/button";
 	import { Input } from "@/components/ui/input";
 	import Send from "@lucide/svelte/icons/send";
+	import CircleArrowLeft from "@lucide/svelte/icons/circle-arrow-left";
 
 	import { twMerge } from "tailwind-merge";
 	import { clsx } from "clsx";
 	import type { ClassValue } from "clsx";
+
+	let { data } = $props();
 
 	function cn(...inputs: ClassValue[]) {
 		return twMerge(clsx(inputs));
@@ -49,10 +52,10 @@
 
 	type User = (typeof users)[number];
 
-	let open = false;
-	let selectedUsers: User[] = [];
+	let open = $state(false);
+	let selectedUsers: User[] = $state([]);
 
-	let messages = [
+	let messages = $state([
 		{
 			role: "agent",
 			content: "Hi, how can I help you today?",
@@ -69,11 +72,16 @@
 			role: "user",
 			content: "I can't log in.",
 		},
-	];
+	]);
 
-	let input = "";
-	$: inputLength = input.trim().length;
+	let input = $state("");
+	let inputLength = $derived(() => input.trim().length);
 </script>
+
+<a href="/{data.username}" class="absolute top-10 left-10">
+	<CircleArrowLeft />
+</a>
+
 
 <div class="w-full flex items-center justify-center">
 	<div class="w-full px-[400px]">
@@ -107,7 +115,7 @@
 			</Card.Content>
 			<Card.Footer class="absolute bottom-0 w-full">
 				<form
-					on:submit={(event) => {
+					onsubmit={(event) => {
 						event.preventDefault();
 						if (inputLength === 0) return;
 						messages = [
