@@ -3,23 +3,45 @@
 	import { Separator } from "$lib/components/ui/separator/index.js";
 	import { Input } from "$lib/components/ui/input/index.js";
 	import { Label } from "$lib/components/ui/label/index.js";
+	import Button from "@/components/ui/button/button.svelte";
 	import RoomListMember from "@/components/roomListMember.svelte";
+	import CircleArrowLeft from "@lucide/svelte/icons/circle-arrow-left";
 </script>
 
-<div class="w-full h-full flex items-center justify-center flex-col">
-	<div class="min-w-[70%]">
-		<div class="flex w-full justify-between">
-			<div class="w-full flex items-center justify-start">
+<a href="/" class="absolute top-10 left-10">
+	<CircleArrowLeft />
+</a>
+
+<div class="w-full flex items-center justify-center flex-col">
+	<div class="min-w-[70%] flex items-center justify-center flex-col">
+		<div class="flex flex-col w-[70%] h-screen justify-center items-center -mb-52">
+
+			<form method="POST" action="?/createRoom" class="w-full flex items-center justify-center" >
 				<div class="grid w-full max-w-sm items-center gap-1.5">
-					<Label for="email">Who do you want to chat with?</Label>
-					<Input type="text" placeholder="Username" />
+					<input name="username" type="text" hidden={true} bind:value={data.username}>
+					<input name="token" type="text" hidden={true} bind:value={data.token}>
+					<input name="roomType" type="text" placeholder="Room Type" hidden={true} value="private">
+					<Label for="email" class="font-bold mb-5">Create private room</Label>
+					<Input name="remoteUser" type="text" placeholder="Username" class="h-12 w-full mb-3"/>
+					<Button type="submit" variant="outline" class="bg-primary hover:bg-primary hover:opacity-50">Create Room</Button>
 				</div>
-			</div>
-			<div>
-				b
-			</div>
+			</form>
+
+			<Separator orientation="horizontal" class="my-20"/>
+
+			<form method="POST" action="?/createRoom" class="w-full flex items-end justify-center mt-10">
+				<div class="grid w-full max-w-sm items-center gap-1.5">
+					<input name="username" type="text" hidden={true} bind:value={data.username}>
+					<input name="token" type="text" hidden={true} bind:value={data.token}>
+					<input name="roomType" type="text" placeholder="Room Type" hidden={true} value="universal">
+					<Label for="email" class="font-bold mb-2">Create universal room</Label>
+					<Button type="submit" variant="outline" class="bg-primary hover:bg-primary hover:opacity-50">Create Room</Button>
+				</div>
+			</form>
 		</div>
-		<Separator />
+
+		<h2 class="scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0 my-20">Existing Rooms</h2>
+
 		<div class="flex w-full justify-between">
 			<div class="mt-10 w-1/2">
 				{#if data.rooms.private.length === 0}
@@ -49,69 +71,4 @@
 		</div>
 	</div>
 </div>
-
-
-<!--
--->
-
-<a href="/">&lt back</a>
-<h2>Hello { data.username }</h2>
-<h2>Create Room</h2>
-
-<div>
-	<h2>Create A Private Room</h2>
-	<span>Username: </span>
-	<form method="POST" action="?/createRoom" >
-		<input name="username" type="text" hidden={true} bind:value={data.username}>
-		<input name="token" type="text" hidden={true} bind:value={data.token}>
-		<input name="roomType" type="text" placeholder="Room Type" hidden={true} value="private">
-		<input name="remoteUser" type="text" placeholder="User">
-		<button type="submit">Create</button>
-	</form>
-</div>
-<br>
-<br>
-<div>
-	<h2>Create A Universal Room</h2>
-	<form method="POST" action="?/createRoom">
-		<input name="username" type="text" hidden={true} bind:value={data.username}>
-		<input name="token" type="text" hidden={true} bind:value={data.token}>
-		<input name="roomType" type="text" placeholder="Room Type" hidden={true} value="universal">
-		<button type="submit">Create</button>
-	</form>
-</div>
-<br>
-<br>
-<div class="flex w-1/2 justify-between"> 
-	<div>
-		<h3 class="text-xl">Private Rooms</h3>
-		<div>
-			{#each data.rooms.private as room }
-				- <a href="/{data.username}/{room.id}">{room.id}</a> <br>
-			{/each}
-		</div>
-	</div>
-	<div>
-		<h3 class="text-xl">Universal Rooms</h3>
-		<div>
-			{#each data.rooms.universal as room }
-				- <a href="/{data.username}/{room.id}">{room.id}</a>
-			{/each}
-		</div>
-	</div>
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

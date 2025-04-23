@@ -17,6 +17,8 @@
   />
   <span class="sr-only">Toggle theme</span>
 </Button>
-<ModeWatcher />
-{@render children()}
+<div class="w-screen min-h-screen bg-background">
+	<ModeWatcher />
+	{@render children()}
+</div>
 
