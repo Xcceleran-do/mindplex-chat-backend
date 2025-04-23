@@ -1,5 +1,6 @@
 <script lang="ts">
 	// get test users from server
+	import type { Message } from '$lib/types';
 
 	import type { PageProps } from './$types';
 	import {  BACKEND_HOST  } from '$lib/api';
@@ -8,7 +9,7 @@
 	let { data }: PageProps = $props();
 
 	let ws: WebSocket | undefined = undefined;
-	let messages: HTMLPreElement
+	let messages = $state(data.currentRoomMessages);
 	let inp: string = $state("")
 
 	if (browser) {
@@ -25,11 +26,20 @@
 		};
 
 		ws.onmessage = (event) => {
-			const messagesDiv = document.getElementById("messages");
-			const message = document.createElement("p");
-			console.log("Received: ", event.data)
-			message.textContent = "Received: " + JSON.stringify(event.data);
-			messagesDiv?.appendChild(message);
+			let data = JSON.parse(JSON.parse(event.data));
+			let msg = data?.message
+
+			if (!msg) {
+				console.error("Message is not recognized")
+			} else if (msg.type === "text") {
+				messages.push(msg.message)
+			} else if (msg.type === "connected") {
+				console.log("Websockket connection confirmed")
+			} else if (msg.type === "sent_confirmation") {
+				messages.push(msg.message)
+			} else {
+				console.error("Unknown message type:", msg)
+			}
 		};
 
 		ws.onerror = (error) => {
@@ -53,7 +63,6 @@
 			}
 			if (ws !== undefined) {
 				ws.send(JSON.stringify(msg));
-				console.log("Sent: ", value)
 			} else {
 				console.log("WebSocket not connected")
 			}
@@ -65,7 +74,16 @@
 <div>
 	<a href="/{data.username}">&lt back</a>
 	<h2>WebSocket Chat Test</h2>
-	<pre id="messages" bind:this={messages}></pre>
+	<div>
+		{#each messages as message}
+			<div>{JSON.stringify(message)}</div>
+			<p>by: {message?.owner_id}</p>
+			<p>{message?.text}</p>
+			<p>{message?.created}</p>
+			<span>-----------------</span>
+		{/each}
+
+	</div>
 	<input type="text" id="messageInput" placeholder="Type a message..." bind:value={inp}>
 	<button id="sendButton" onclick={sendMessage}>Send</button>
 </div>

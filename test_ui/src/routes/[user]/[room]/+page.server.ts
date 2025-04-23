@@ -1,6 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { getUserByUsername, getOrCreateRoom, getRoomParticipants, getRoom } from '$lib/api';
+import { getRoomMessages, getRoomParticipants, getRoom } from '$lib/api';
 
 export const load: PageServerLoad = async ({ params, parent }) => {
 	// Get query parameter
@@ -16,10 +16,12 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		throw redirect(302, `/${parentData.username}`);
 
 	const participants = await getRoomParticipants(parentData.token, parentData.username, room.id);
+	const messages = await getRoomMessages(parentData.token, parentData.username, room.id);
 
 	return {
 		currentRoom: room,
-		currentRoomParticipants: participants
+		currentRoomParticipants: participants,
+		currentRoomMessages: messages
 	}
 };
 

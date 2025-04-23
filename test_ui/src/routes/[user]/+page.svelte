@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { getOrCreatePrivateRoom, getUserByUsername } from '$lib/api';
 	let { data } = $props();
 </script>
 
