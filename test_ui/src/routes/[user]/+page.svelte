@@ -1,6 +1,58 @@
 <script lang="ts">
 	let { data } = $props();
+	import { Separator } from "$lib/components/ui/separator/index.js";
+	import { Input } from "$lib/components/ui/input/index.js";
+	import { Label } from "$lib/components/ui/label/index.js";
+	import RoomListMember from "@/components/roomListMember.svelte";
 </script>
+
+<div class="w-full h-full flex items-center justify-center flex-col">
+	<div class="min-w-[70%]">
+		<div class="flex w-full justify-between">
+			<div class="w-full flex items-center justify-start">
+				<div class="grid w-full max-w-sm items-center gap-1.5">
+					<Label for="email">Who do you want to chat with?</Label>
+					<Input type="text" placeholder="Username" />
+				</div>
+			</div>
+			<div>
+				b
+			</div>
+		</div>
+		<Separator />
+		<div class="flex w-full justify-between">
+			<div class="mt-10 w-1/2">
+				{#if data.rooms.private.length === 0}
+					<div class="w-full h-[100px] flex items-center justify-center">
+						<h3 class="text-xl">No Universal Rooms</h3>
+					</div>
+				{:else}
+					{#each data.rooms.private as room }
+						<RoomListMember username={data.username} room={room}/>
+					{/each}
+				{/if}
+			</div>
+			<Separator orientation="vertical" />
+			<div class="mt-10 w-1/2">
+				{#if data.rooms.universal.length === 0}
+					<div class="w-full h-[100px] flex items-center justify-center">
+						<h3 class="text-xl">No Universal Rooms</h3>
+					</div>
+				{:else}
+					{#each data.rooms.universal as room }
+						<RoomListMember username={data.username} room={room}/>
+					{/each}
+				{/if}
+
+
+			</div>
+		</div>
+	</div>
+</div>
+
+
+<!--
+-->
 
 <a href="/">&lt back</a>
 <h2>Hello { data.username }</h2>
