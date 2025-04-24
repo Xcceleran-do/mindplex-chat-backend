@@ -68,7 +68,6 @@ class WSMessageType(str, Enum):
     SENT_CONFIRMATION = "sent_confirmation"
 
 
-
 class WSMessage(BaseModel):
     type: WSMessageType
     message: Optional[Message | str] 
@@ -100,7 +99,7 @@ connections = ConnectionManager()
 async def websocket_endpoint(
     websocket: WebSocket,
     room_id: str,
-    session: Session = Depends(get_session),
+    # session: Session = Depends(get_session),
     user_or_err: User | str = Depends(get_user_from_qp_dep),
 ):
     if type(user_or_err) is str:
@@ -117,38 +116,42 @@ async def websocket_endpoint(
 
     assert type(user_or_err) is User
     user = user_or_err
+    user_id = user.remote_id
 
-    room = await Room.get_by_id(room_id, session, raise_exc=False)
+    with Session(engine) as session:
+        room_for_validation = await Room.get_by_id(room_id, session, raise_exc=False)
 
-    # check if room exists
-    if room is None:
-        await websocket.accept()
-        response = WSResponse(
-            success=False,
-            error=WSError(
-                status_code=404, short_code="not_found", details="room not found"
-            ),
-        )
-        await websocket.send_json(response.model_dump_json(exclude_none=True))
-        await websocket.close()
-        return
+        # check if room exists
+        if room_for_validation is None:
+            await websocket.accept()
+            response = WSResponse(
+                success=False,
+                error=WSError(
+                    status_code=404, short_code="not_found", details="room not found"
+                ),
+            )
+            await websocket.send_json(response.model_dump_json(exclude_none=True))
+            await websocket.close()
+            return
 
-    # check if user is in room
-    if not await room.is_in_room(user) and room.room_type == RoomType.PRIVATE:
-        await websocket.accept()
-        response = WSResponse(
-            success=False,
-            error=WSError(
-                status_code=403,
-                short_code="not_in_room",
-                details="user not in private room",
-            ),
-        )
-        await websocket.send_json(response.model_dump_json(exclude_none=True))
-        return
+        # check if user is in room
+        if not await room_for_validation.is_in_room(user) and room_for_validation.room_type == RoomType.PRIVATE:
+            await websocket.accept()
+            response = WSResponse(
+                success=False,
+                error=WSError(
+                    status_code=403,
+                    short_code="not_in_room",
+                    details="user not in private room",
+                ),
+            )
+            await websocket.send_json(response.model_dump_json(exclude_none=True))
+            return
 
-    assert room.id
-    await connections.connect(websocket, room.id)
+        assert room_for_validation.id
+
+    await connections.connect(websocket, room_id)
+
     try:
         while True:
             message_json = await websocket.receive_json()
@@ -166,13 +169,23 @@ async def websocket_endpoint(
                 await websocket.send_json(response.model_dump_json(exclude_none=True))
                 continue
 
-            message = Message(owner=user, text=data.message)
-            await room.add_message(message)
-            session.add(message)
-            session.commit()
-            session.refresh(message)
+            with Session(engine) as session:
 
-            await connections.send_message(message, room.id, websocket)
+                room = await Room.get_by_id(room_id, session, raise_exc=True)
+                user = await User.from_remote_or_db(user_id, session)  # user must exist in local db
+                assert room
+
+                message = Message(owner=user, text=data.message)
+
+                await room.add_message(message)
+                session.add(message)
+                session.commit()
+                session.refresh(message)
+                session.refresh(user)
+                session.refresh(room)
+
+
+            await connections.send_message(message, room_id, websocket)
             await websocket.send_json(
                 WSResponse(
                     success=True,
@@ -184,7 +197,7 @@ async def websocket_endpoint(
 
     except WebSocketDisconnect:
         print("A user has disconnected: ", websocket)
-        await connections.disconnect(websocket, room.id)
+        await connections.disconnect(websocket, room_id)
         # return session
         session.close()
 
