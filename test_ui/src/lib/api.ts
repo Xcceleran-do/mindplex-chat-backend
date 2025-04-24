@@ -1,6 +1,7 @@
 import type { Message, Room, ChatUser } from "$lib/types";
+import { PUBLIC_CHAT_BACKEND_HOST } from "$env/static/public";
 
-export const BACKEND_HOST = "localhost:9010"
+export const BACKEND_HOST= PUBLIC_CHAT_BACKEND_HOST
 
 async function fetchChatBackend(
 	path: string,
@@ -15,7 +16,8 @@ async function fetchChatBackend(
 		"X-Username": username,
 		...fetchParams.headers,
 	};
-	const response = await fetch(`http://${BACKEND_HOST}/${path}`, fetchParams);
+	console.log("backend host: ", BACKEND_HOST);
+	const response = await fetch(`${BACKEND_HOST}/${path}`, fetchParams);
 
 	if (response.status != 200) {
 		console.error("ChatBackendError: " + response.status + " " + response.statusText);
