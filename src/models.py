@@ -95,9 +95,9 @@ class RoomParticipantLink(SQLModel, table=True):
 
 class RoomMessagesLink(SQLModel, table=True):
     message_id: str | None = Field(
-        default=None, foreign_key="message.id", primary_key=True
+        default=None, foreign_key="message.id", primary_key=True, ondelete="CASCADE"
     )
-    room_id: str | None = Field(default=None, foreign_key="room.id", primary_key=True)
+    room_id: str | None = Field(default=None, foreign_key="room.id", primary_key=True, ondelete="CASCADE")
 
 
 class User(SQLModel, table=True):
