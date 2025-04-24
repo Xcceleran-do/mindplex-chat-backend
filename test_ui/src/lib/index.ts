@@ -1,8 +1,6 @@
-import { DAVE_PASSWORD } from '$env/static/private';
-
 
 export const testUsers = {
-	"dave" : DAVE_PASSWORD,
+	"dave" : "dave",
 	"ivan": "ivan",
 	"tony": "tony"
 }
