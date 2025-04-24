@@ -102,43 +102,41 @@
 
 
 <div class="w-full flex items-center justify-center">
-	<div class="w-full px-[400px] pt-20">
-		<Card.Root class="w-full min-h-screen relative border-none rounded-none flex flex-col justify-between">
-			<div>
-				<Card.Header class="flex flex-row items-center mb-5">
-					<div class="flex items-center space-x-4">
-						<Avatar.Root>
-							<Avatar.Fallback>
-								{data.username.charAt(0).toUpperCase()}{data.username.charAt(1).toUpperCase()}
-							</Avatar.Fallback>
-						</Avatar.Root>
-						<div>
-							<p class="text-sm font-medium leading-none">Chat with 
-								{#each data.currentRoomParticipants as participant}
-									{participant.remote_id}, 
-								{/each}
-							</p>
-							<p class="text-muted-foreground text-sm">Room id: {data.currentRoom.id}</p>
+	<div class="w-full px-[250px] h-screen overflow-hidden -mt-[80px] pt-[80px]">
+		<Card.Root class="w-full h-full relative rounded-none flex flex-col justify-between border-y-0 border-x-2 border-x-muted px-32">
+			<Card.Header class="flex flex-row items-center my-5 h-[5vh]">
+				<div class="flex items-center space-x-4">
+					<Avatar.Root>
+						<Avatar.Fallback>
+							{data.username.charAt(0).toUpperCase()}{data.username.charAt(1).toUpperCase()}
+						</Avatar.Fallback>
+					</Avatar.Root>
+					<div>
+						<p class="text-sm font-medium leading-none">Chat with 
+							{#each data.currentRoomParticipants as participant}
+								{participant.remote_id}, 
+							{/each}
+						</p>
+						<p class="text-muted-foreground text-sm">Room id: {data.currentRoom.id}</p>
+					</div>
+				</div>
+			</Card.Header>
+			<Card.Content class="w-full overflow-scroll">
+				<div class="space-y-4 px-10">
+					{#each messages as message}
+						<div
+							class={cn(
+								"flex w-max max-w-[75%] flex-col gap-2 rounded-lg px-3 py-2 text-sm",
+								message.owner_id === data.user.id
+									? "bg-primary text-primary-foreground ml-auto"
+									: "bg-muted"
+							)}
+						>
+							{message.text}
 						</div>
-					</div>
-				</Card.Header>
-				<Card.Content>
-					<div class="space-y-4 px-10">
-						{#each messages as message}
-							<div
-								class={cn(
-									"flex w-max max-w-[75%] flex-col gap-2 rounded-lg px-3 py-2 text-sm",
-									message.owner_id === data.user.id
-										? "bg-primary text-primary-foreground ml-auto"
-										: "bg-muted"
-								)}
-							>
-								{message.text}
-							</div>
-						{/each}
-					</div>
-				</Card.Content>
-			</div>
+					{/each}
+				</div>
+			</Card.Content>
 			<Card.Footer class="w-full">
 				<form
 					onsubmit={(event) => {
@@ -172,73 +170,5 @@
 				</form>
 			</Card.Footer>
 		</Card.Root>
-		<Dialog.Root bind:open>
-			<Dialog.Content class="gap-0 p-0 outline-none">
-				<Dialog.Header class="px-4 pb-4 pt-5">
-					<Dialog.Title>New message</Dialog.Title>
-					<Dialog.Description>
-						Invite a user to this thread. This will create a new group message.
-					</Dialog.Description>
-				</Dialog.Header>
-				<Command.Root class="overflow-hidden rounded-t-none border-t bg-transparent">
-					<Command.Input placeholder="Search user..." />
-					<Command.List>
-						<Command.Empty>No users found.</Command.Empty>
-						<Command.Group class="p-2">
-							{#each users as user}
-								<Command.Item
-									class="flex items-center px-2"
-									onSelect={() => {
-										if (selectedUsers.includes(user)) {
-											selectedUsers = selectedUsers.filter(
-												(selectedUser) => selectedUser !== user
-											);
-										} else {
-											selectedUsers = [...users].filter((u) =>
-												[...selectedUsers, user].includes(u)
-											);
-										}
-									}}
-								>
-									<Avatar.Root>
-										<Avatar.Fallback>{user.name[0]}</Avatar.Fallback>
-									</Avatar.Root>
-									<div class="ml-2">
-										<p class="text-sm font-medium leading-none">
-											{user.name}
-										</p>
-										<p class="text-muted-foreground text-sm">
-											{user.email}
-										</p>
-									</div>
-									{#if selectedUsers.includes(user)}
-										<!--
-<Check class="text-primary ml-auto flex h-5 w-5" />
--->
-										<p>placholder...</p>
-									{/if}
-								</Command.Item>
-							{/each}
-						</Command.Group>
-					</Command.List>
-				</Command.Root>
-				<Dialog.Footer class="flex items-center border-t p-4 sm:justify-between">
-					{#if selectedUsers.length}
-						<div class="flex -space-x-2 overflow-hidden">
-							{#each selectedUsers as user}
-								<Avatar.Root class="border-background inline-block border-2">
-									<Avatar.Fallback>{user.name[0]}</Avatar.Fallback>
-								</Avatar.Root>
-							{/each}
-						</div>
-					{:else}
-						<p class="text-muted-foreground text-sm">Select users to add to this thread.</p>
-					{/if}
-					<Button disabled={selectedUsers.length < 2} onclick={() => (open = false)}>
-						Continue
-					</Button>
-				</Dialog.Footer>
-			</Dialog.Content>
-		</Dialog.Root>
 	</div>
 </div>

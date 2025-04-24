@@ -9,7 +9,7 @@
 </script>
 
 <div class="bg-background">
-	<div class="w-screen h-[80px] flex items-center justify-between border-b-[1px] border-b-muted mb-10 px-40">
+	<div class="w-screen h-[80px] flex items-center justify-between border-b-[1px] border-b-muted px-40">
 		<a href="/">
 			<h4 class="scroll-m-20 text-xl font-semibold tracking-tight">Chat App</h4>
 		</a>
