@@ -22,7 +22,7 @@ async function fetchChatBackend(
 	if (response.status != 200) {
 		console.error("ChatBackendError: " + response.status + " " + response.statusText);
 		try {
-			console.log(await response.json());
+			console.log(JSON.stringify(await response.json()));
 		} catch {
 			console.log(await response.text());
 		}
