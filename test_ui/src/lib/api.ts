@@ -11,16 +11,17 @@ async function fetchChatBackend(
 ) : Promise<any | undefined> {
 
 	fetchParams.headers = {
-		"Content-Type": "application/json",
-		"Authorization": `Bearer ${token}`,
-		"X-Username": username,
+		"content-type": "application/json",
+		"authorization": `Bearer ${token}`,
+		"x-username": username,
 		...fetchParams.headers,
 	};
-	console.log("backend host: ", BACKEND_HOST);
 	const response = await fetch(`${BACKEND_HOST}/${path}`, fetchParams);
+
 
 	if (response.status != 200) {
 		console.error("ChatBackendError: " + response.status + " " + response.statusText);
+		console.log(JSON.stringify(fetchParams.headers));
 		try {
 			console.log(JSON.stringify(await response.json()));
 		} catch {

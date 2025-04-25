@@ -5,20 +5,6 @@ import { getMe, getRooms } from '$lib/api';
 
 const AUTH_BACKEND_HOST = "staging.mindplex.ai"
 
-async function createRoom() {
-	let remoteUser;
-	try {
-		remoteUser = await getUserByUsername(data.token, data.username, participant)
-	} catch (e) {
-		console.log(e)
-	}
-	if (remoteUser === undefined)
-		throw new Error("Remote user not found")
-
-	let room = await getOrCreatePrivateRoom(data.token, data.username, remoteUser)
-
-}
-
 async function auth_user(username: string) {
 	// get password or null/undefined
 	const userPassword = testUsers[username]
@@ -47,6 +33,7 @@ async function auth_user(username: string) {
 		const data = await response.json()
 		token = data.token
 	}
+	console.log("token: ", token)
 
 	return token
 }
