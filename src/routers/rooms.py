@@ -124,7 +124,7 @@ async def get_room(
     except AssertionError:  # Just in case
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_in_room(user):
+    if not await room.is_user_in_room(user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )
@@ -161,7 +161,7 @@ async def get_room_participants(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_in_room(user):
+    if not await room.is_user_in_room(user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )
@@ -196,7 +196,7 @@ async def get_room_messages(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_in_room(user):
+    if not await room.is_user_in_room(user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )

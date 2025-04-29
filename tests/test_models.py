@@ -103,24 +103,24 @@ class TestRoom:
         assert message in rooms[0].messages
 
     @pytest.mark.asyncio
-    async def test_is_in_room(
+    async def test_is_user_in_room(
         self, session: Session, users: list[User], rooms: list[Room]
     ):
-        assert await rooms[1].is_in_room(users[1])
-        assert not await rooms[1].is_in_room(users[0])
-        assert not await rooms[1].is_in_room(users[2])
+        assert await rooms[1].is_user_in_room(users[1])
+        assert not await rooms[1].is_user_in_room(users[0])
+        assert not await rooms[1].is_user_in_room(users[2])
 
         await rooms[1].add_participant(users[0])
         session.commit()
 
-        assert await rooms[1].is_in_room(users[0])
-        assert await rooms[1].is_in_room(users[1])
-        assert not await rooms[1].is_in_room(users[2])
+        assert await rooms[1].is_user_in_room(users[0])
+        assert await rooms[1].is_user_in_room(users[1])
+        assert not await rooms[1].is_user_in_room(users[2])
 
         # all public rooms should be accessible
-        assert await rooms[0].is_in_room(users[0])
-        assert await rooms[0].is_in_room(users[1])
-        assert await rooms[0].is_in_room(users[2])
+        assert await rooms[0].is_user_in_room(users[0])
+        assert await rooms[0].is_user_in_room(users[1])
+        assert await rooms[0].is_user_in_room(users[2])
 
     @pytest.mark.asyncio
     async def test_room_expiry(
@@ -178,6 +178,11 @@ class TestRoom:
 
         for room in queried_rooms:
             assert room.id not in expired_room_ids 
+
+
+    @pytest.mark.asyncio
+    async def test_send_message():
+        pass
 
 
 

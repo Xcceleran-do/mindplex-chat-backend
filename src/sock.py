@@ -135,7 +135,7 @@ async def websocket_endpoint(
             return
 
         # check if user is in room
-        if not await room_for_validation.is_in_room(user) and room_for_validation.room_type == RoomType.PRIVATE:
+        if not await room_for_validation.is_user_in_room(user) and room_for_validation.room_type == RoomType.PRIVATE:
             await websocket.accept()
             response = WSResponse(
                 success=False,

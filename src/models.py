@@ -1,7 +1,8 @@
 from datetime import datetime
 from enum import Enum
 import os
-from typing import Annotated, Optional
+import json
+from typing import Annotated, Generator, Optional
 from pydantic import BaseModel
 from sqlmodel import (
     Relationship,
@@ -17,7 +18,7 @@ import psycopg2
 from psycopg2 import OperationalError
 import secrets
 import time
-
+from confluent_kafka import Producer, Consumer, KafkaException, KafkaError
 
 
 POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
@@ -31,6 +32,9 @@ TEST_POSTGRES_HOST = os.environ.get("TEST_POSTGRES_HOST")
 TEST_POSTGRES_DB = os.environ.get("TEST_POSTGRES_DB")
 TEST_POSTGRES_PORT = os.environ.get("TEST_POSTGRES_PORT")
 TEST_POSTGRES_USER = os.environ.get("TEST_POSTGRES_USER")
+
+
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 
 if os.environ["ENVIRONMENT"] == "test": 
     engine = create_engine(
@@ -65,21 +69,10 @@ def wait_for_postgres(host, port, db, user, password, timeout=30):
             print("Waiting for PostgreSQL...")
             time.sleep(1)
 
+
 def generate_id():
     # TODO: check for id duplication
     return secrets.token_hex(8)
-
-# Exceptions
-class RoomValidationException(Exception):
-    pass
-
-
-class RoomNotFoundException(Exception):
-    pass
-
-
-class UserNotFoundException(Exception):
-    pass
 
 
 class RoomType(str, Enum):
@@ -173,6 +166,17 @@ class Room(RoomBase, table=True):
     created: datetime = Field(default_factory=datetime.now)
     last_interacted: datetime = Field(default_factory=datetime.now)
 
+    __kafka_topic_prefix__ = "room"
+    __kafka_group_prefix__ = "group"
+
+    def kafka_topic(self):
+        return f"{self.__kafka_topic_prefix__}-{self.id}"
+
+    def kafka_group(self):
+        return f"{self.__kafka_group_prefix__}-{self.id}"
+
+
+
     async def add_participant(self, participant: "User"):
         """add a participant to the room and commit to db.
 
@@ -180,7 +184,7 @@ class Room(RoomBase, table=True):
             RoomValidationException: if the participant is already in the room
             RoomValidationException: if the room is private and the room has > 2 participants
         """
-        if self.room_type == RoomType.PRIVATE and await self.is_in_room(participant):
+        if self.room_type == RoomType.PRIVATE and await self.is_user_in_room(participant):
             raise RoomValidationException("Participant is already in the room")
 
         if self.room_type == RoomType.PRIVATE and len(self.participants) == 1:
@@ -202,7 +206,7 @@ class Room(RoomBase, table=True):
             Message: the message that is added
         """
         if (
-            not await self.is_in_room(message.owner)
+            not await self.is_user_in_room(message.owner)
             and not (self.room_type == RoomType.UNIVERSAL)
         ):
             raise RoomValidationException("User is not in the room")
@@ -211,7 +215,10 @@ class Room(RoomBase, table=True):
 
         return message
 
-    async def is_in_room(self, user: "User"):
+    async def is_message_in_room(self, message: "Message"):
+        return message in self.messages
+
+    async def is_user_in_room(self, user: "User"):
         """checks if a user is in the room as a participant or owner
 
         Args:
@@ -250,6 +257,82 @@ class Room(RoomBase, table=True):
             raise RoomNotFoundException("Room not found")
         return room
 
+    async def send_message(self, message: "Message"):
+        """send a message to a kafka topic representing the room. make sure
+        that the message in question is refreshed before sending as this might
+        cause a race condition.
+
+        Args:
+            message (Message): the message to send
+
+        Raises:
+            RoomValidationException: if the message is not in the room
+            RoomNotFoundException: if the room is not found in the database
+
+        Returns:
+            Message: the message that is sent
+        """
+
+        producer = Producer({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
+
+        if not await self.is_message_in_room(message):
+            raise RoomValidationException("Message is not in the room")
+
+        if self.id == None:
+            raise RoomNotFoundException("room id is not set")
+
+        if message.id == None:
+            raise MessageNotFoundException("message id is not set")
+
+        producer.produce(
+            self.kafka_topic(),
+            json.dumps(
+                {
+                    "type": "text",
+                    "message_id": message.id
+                }
+            ).encode('utf-8')
+        )
+        producer.flush()
+        return {"status": "message sent"}
+
+    def message_stream(self) -> Generator[Optional["Message"], None, None]:
+        """ Generates a stream of messages from a kafka topic representing the room
+
+        Yields:
+            Message: the message
+
+
+        """
+        consumer = Consumer({
+            'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
+            'group.id': self.kafka_group(),
+            'auto.offset.reset': 'earliest'
+        })
+    
+        consumer.subscribe([self.kafka_topic()])
+    
+        try:
+            while True:
+                msg = consumer.poll(1.0)
+
+                if msg is None:
+                    continue
+                if msg.error():
+                    # don't crash if the topic does not exist
+                    if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                        yield None
+                        break
+                    raise KafkaException(msg.error())
+
+                msg = json.loads(msg.value().decode('utf-8'))
+
+                with Session(engine) as session:
+                    message = session.exec(select(Message).where(Message.id == msg["message_id"])).first()
+                    yield message
+        finally:
+            consumer.close()
+
 
 class RoomCreate(RoomBase):
     participants: list[str] = Field(default=[])
@@ -268,8 +351,25 @@ class Message(SQLModel, table=True):
         back_populates="messages", link_model=RoomMessagesLink
     )
 
+# Exceptions
+
+class RoomValidationException(Exception):
+    pass
+
+
+class RoomNotFoundException(Exception):
+    pass
+
+
+class UserNotFoundException(Exception):
+    pass
+
+
+class MessageNotFoundException(Exception):
+    pass
+
 
 if __name__ == "__main__":
-    # Run migrations here
     SQLModel.metadata.create_all(engine)
+
 
