@@ -24,7 +24,6 @@ async def get_rooms(
     participant__id: Annotated[Optional[str], Query()] = None,
     peer__id: Annotated[Optional[str], Query()] = None,
 ):
-    print("user_id: ", user.id)
 
     query = (
         select(Room)
@@ -125,8 +124,6 @@ async def get_room(
     except AssertionError:  # Just in case
         raise HTTPException(status_code=404, detail="Room not found")
 
-    print(f"requested_user: {user}")
-
     if not await room.is_in_room(user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
@@ -181,8 +178,6 @@ async def get_room_participants(
     assert room is not None
     all_participants = room.participants
     all_participants.extend(message_senders)
-
-    print("all_participants: ", all_participants)
 
     return all_participants
 

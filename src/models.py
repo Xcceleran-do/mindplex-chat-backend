@@ -44,7 +44,6 @@ else:
         max_overflow=20
    )
 
-print("engine", engine)
 # Helpers
 
 def wait_for_postgres(host, port, db, user, password, timeout=30):
