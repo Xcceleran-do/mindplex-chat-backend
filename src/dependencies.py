@@ -6,6 +6,9 @@ from src.models import User, engine
 import jwt
 
 
+# settings and constants
+DEFAULT_UNIVERSAL_GROUP_EXPIRY = 10 * 60
+
 def get_session():
     with Session(engine) as session:
         yield session

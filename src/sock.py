@@ -26,7 +26,7 @@ class ConnectionManager:
                 message=WSMessage(
                     type=WSMessageType.CONNECTED, message=None, sender=None
                 ),
-            ).model_dump_json(exclude_none=True)
+            ).model_dump(exclude_none=True)
         )
 
         if room_id not in self.active_connections:
@@ -58,7 +58,7 @@ class ConnectionManager:
                         message=WSMessage(
                             type=WSMessageType.TEXT, message=message, sender=None
                         )
-                    ).model_dump_json(exclude_none=True)
+                    ).model_dump(exclude_none=True)
                 )
 
 
@@ -110,7 +110,7 @@ async def websocket_endpoint(
                 status_code=401, short_code="unauthorized", details=user_or_err
             ),
         )
-        await websocket.send_json(response.model_dump_json(exclude_none=True))
+        await websocket.send_json(response.model_dump(exclude_none=True))
         await websocket.close()
         return
 
@@ -130,7 +130,7 @@ async def websocket_endpoint(
                     status_code=404, short_code="not_found", details="room not found"
                 ),
             )
-            await websocket.send_json(response.model_dump_json(exclude_none=True))
+            await websocket.send_json(response.model_dump(exclude_none=True))
             await websocket.close()
             return
 
@@ -145,7 +145,7 @@ async def websocket_endpoint(
                     details="user not in private room",
                 ),
             )
-            await websocket.send_json(response.model_dump_json(exclude_none=True))
+            await websocket.send_json(response.model_dump(exclude_none=True))
             return
 
         assert room_for_validation.id
@@ -166,7 +166,7 @@ async def websocket_endpoint(
                         details=ve.json(),
                     ),
                 )
-                await websocket.send_json(response.model_dump_json(exclude_none=True))
+                await websocket.send_json(response.model_dump(exclude_none=True))
                 continue
 
             with Session(engine) as session:
@@ -192,7 +192,7 @@ async def websocket_endpoint(
                     message=WSMessage(
                         type=WSMessageType.SENT_CONFIRMATION, message=message, sender=user
                     ),
-                ).model_dump_json(exclude_none=True)
+                ).model_dump(exclude_none=True)
             )
 
     except WebSocketDisconnect:
