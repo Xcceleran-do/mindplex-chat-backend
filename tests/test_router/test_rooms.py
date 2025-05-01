@@ -274,6 +274,7 @@ class TestGetRooms:
         data = response2.json()
         assert len(data) == 40
 
+
 class TestGetRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
         response = client.get(
@@ -465,6 +466,28 @@ class TestGetRoomMessages:
 
         assert response.status_code == 200
         assert data == []
+
+    def test_retrieved_message_is_in_room(
+        self,
+        token: dict[str, Any],
+        client: TestClient,
+        users: list[User],
+        rooms: list[Room],
+        a_lot_of_messages: list[Message],
+    ):
+        # correct messages retrieved
+        response = client.get(
+            f"/rooms/{rooms[0].id}/messages",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "test_user"},
+        )
+        data = response.json()
+        
+        assert response.status_code == 200
+        assert len(data) == len(rooms[0].messages)
+
+        for message in data:
+            assert message["id"] in [message.id for message in rooms[0].messages]
+            assert message["id"] not in [message.id for message in rooms[1].messages]
 
 
 class TestGetRoomParticipants:

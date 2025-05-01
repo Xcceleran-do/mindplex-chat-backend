@@ -318,6 +318,7 @@ def user_token_fixture():
 
     return response.json()['token']
 
+
 @pytest.fixture(name="tony_token")
 def tony_token_fixture():
 
@@ -333,6 +334,7 @@ def tony_token_fixture():
 
     return response.json()
 
+
 @pytest.fixture(name="a_lot_of_rooms")
 def a_lot_of_rooms_fixture(session: Session):
     for i in range(100):
@@ -343,4 +345,32 @@ def a_lot_of_rooms_fixture(session: Session):
         session.add(room)
     session.commit()
         
+
+@pytest.fixture(name="a_lot_of_messages")
+def a_lot_of_messages_fixture(session: Session, users: list[User], rooms: list[Room]):
+    all_messages: list[Message] = []
+    for i in range(50):
+        message = Message(text=f"message {i} by {users[0].remote_id}", owner=users[0])
+        session.add(message)
+        all_messages.append(message)
+    session.commit()
+
+    for i in range(50):
+        message = Message(text=f"message {i} by {users[1].remote_id}", owner=users[1])
+        session.add(message)
+        all_messages.append(message)
+    session.commit()
+
+    rooms[0].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 0]  # even
+    rooms[1].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 1]  # odd
+
+    session.commit()
+
+    return all_messages
+
+
+
+
+
+
 
