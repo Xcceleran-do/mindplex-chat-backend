@@ -26,23 +26,10 @@ POSTGRES_DB = os.environ.get("POSTGRES_DB")
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
 POSTGRES_USER = os.environ.get("POSTGRES_USER")
 
-TEST_POSTGRES_PASSWORD = os.environ.get("TEST_POSTGRES_PASSWORD")
-TEST_POSTGRES_HOST = os.environ.get("TEST_POSTGRES_HOST")
-TEST_POSTGRES_DB = os.environ.get("TEST_POSTGRES_DB")
-TEST_POSTGRES_PORT = os.environ.get("TEST_POSTGRES_PORT")
-TEST_POSTGRES_USER = os.environ.get("TEST_POSTGRES_USER")
-
-if os.environ["ENVIRONMENT"] == "test": 
-    engine = create_engine(
-        f"postgresql://{TEST_POSTGRES_USER}:{TEST_POSTGRES_PASSWORD}@{TEST_POSTGRES_HOST}:{TEST_POSTGRES_PORT}/{TEST_POSTGRES_DB}",
-        pool_size=10,
-        max_overflow=20
-   )
-else:
-    engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
-        pool_size=10,
-        max_overflow=20
-   )
+engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
+    pool_size=10,
+    max_overflow=20
+)
 
 print("engine", engine)
 # Helpers
