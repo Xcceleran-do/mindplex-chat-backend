@@ -13,7 +13,14 @@ from confluent_kafka import Producer, Consumer, KafkaException, KafkaError
 
 @pytest.fixture(autouse=True)
 def set_env_vars(monkeypatch):
-    monkeypatch.setenv("ENVIRONMENT", "test")
+    # change db
+    monkeypatch.setenv("POSTGRES_USER", "test_fastapi")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test_secret")
+    monkeypatch.setenv("POSTGRES_DB", "test_fastapi_db")
+    monkeypatch.setenv("POSTGRES_HOST", "test_db")
+    monkeypatch.setenv("POSTGRES_PORT", "5432")
+
+
 
 @pytest.fixture
 def client():
