@@ -23,6 +23,8 @@ async def get_rooms(
     filter: RoomFilter = FilterDepends(RoomFilter), 
     participant__id: Annotated[Optional[str], Query()] = None,
     peer__id: Annotated[Optional[str], Query()] = None,
+    limit: Annotated[Optional[int], Query()] = None,
+    offset: Annotated[Optional[int], Query()] = None
 ):
 
     query = (
@@ -70,6 +72,13 @@ async def get_rooms(
                 and room.room_type == RoomType.PRIVATE
             )
         ]
+
+    # in memory pagination, change back to sql when possible
+    if offset is None:
+        offset = 0
+
+    if limit is not None:
+        rooms = rooms[offset:offset+limit]
 
 
     return rooms

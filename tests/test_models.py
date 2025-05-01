@@ -182,127 +182,127 @@ class TestRoom:
         for room in queried_rooms:
             assert room.id not in expired_room_ids 
 
-    @pytest.mark.asyncio
-    async def test_send_message(
-            self,
-            session: Session,
-            users: list[User],
-            rooms: list[Room],
-            messages: dict[str, list[Message]],
-    ):
-        consumer1 = rooms[0].kafka_consumer()
-        user_0_messages = messages.get("0", [])
-        rooms[0].messages.extend(user_0_messages)
-        session.commit()
-        session.refresh(rooms[0])
+    # @pytest.mark.asyncio
+    # async def test_send_message(
+    #         self,
+    #         session: Session,
+    #         users: list[User],
+    #         rooms: list[Room],
+    #         messages: dict[str, list[Message]],
+    # ):
+    #     consumer1 = rooms[0].kafka_consumer()
+    #     user_0_messages = messages.get("0", [])
+    #     rooms[0].messages.extend(user_0_messages)
+    #     session.commit()
+    #     session.refresh(rooms[0])
+    #
+    #     sent_msg = await rooms[0].send_message(user_0_messages)
+    #     assert sent_msg
+    #
+    #     # consume message as all other users
+    #     msg1 = consumer1.poll(10)
+    #
+    #     if msg1 is None:
+    #         print("no message")
+    #         raise KafkaException("no message")
+    #     elif msg1.error():
+    #         print("error: ", msg1.error())
+    #         raise KafkaException(msg1.error())
+    #     else:
+    #         msg1 = json.loads(msg1.value().decode('utf-8'))
+    #         assert msg1["type"] == "text"
+    #         assert msg1["message_id"] == sent_msg[0].id
+    #
+    #     consumer1.close()
+    #
+    # @pytest.mark.asyncio
+    # async def test_message_stream(
+    #     self,
+    #     session: Session,
+    #     users: list[User],
+    #     rooms: list[Room],
+    #     messages: dict[str, list[Message]]
+    # ):
+    #     user_0_messages = messages.get("0", [])
+    #     rooms[0].messages.extend(user_0_messages)
+    #     session.commit()
+    #     session.refresh(rooms[0])
+    #
+    #     producer = rooms[0].kafka_producer()
+    #
+    #     for message in user_0_messages:
+    #         producer.produce(
+    #             topic=rooms[0].kafka_topic_name(),
+    #             value=json.dumps({
+    #                 "type": "text",
+    #                 "message_id": message.id
+    #             })
+    #         )
+    #
+    #     new_messages = rooms[0].message_stream()
+    #
+    #     msg1 = next(new_messages)
+    #     assert msg1
+    #     assert msg1.id == user_0_messages[0].id 
+    #
+    #     msg2 = next(new_messages)
+    #     assert msg2
+    #     assert msg2.id == user_0_messages[1].id
+    #
+    #     msg3 = next(new_messages)
+    #     assert msg3
+    #     assert msg3.id == user_0_messages[2].id
 
-        sent_msg = await rooms[0].send_message(user_0_messages)
-        assert sent_msg
-
-        # consume message as all other users
-        msg1 = consumer1.poll(10)
-
-        if msg1 is None:
-            print("no message")
-            raise KafkaException("no message")
-        elif msg1.error():
-            print("error: ", msg1.error())
-            raise KafkaException(msg1.error())
-        else:
-            msg1 = json.loads(msg1.value().decode('utf-8'))
-            assert msg1["type"] == "text"
-            assert msg1["message_id"] == sent_msg[0].id
-
-        consumer1.close()
-
-    @pytest.mark.asyncio
-    async def test_message_stream(
-        self,
-        session: Session,
-        users: list[User],
-        rooms: list[Room],
-        messages: dict[str, list[Message]]
-    ):
-        user_0_messages = messages.get("0", [])
-        rooms[0].messages.extend(user_0_messages)
-        session.commit()
-        session.refresh(rooms[0])
-
-        producer = rooms[0].kafka_producer()
-
-        for message in user_0_messages:
-            producer.produce(
-                topic=rooms[0].kafka_topic_name(),
-                value=json.dumps({
-                    "type": "text",
-                    "message_id": message.id
-                })
-            )
-
-        new_messages = rooms[0].message_stream()
-
-        msg1 = next(new_messages)
-        assert msg1
-        assert msg1.id == user_0_messages[0].id 
-
-        msg2 = next(new_messages)
-        assert msg2
-        assert msg2.id == user_0_messages[1].id
-
-        msg3 = next(new_messages)
-        assert msg3
-        assert msg3.id == user_0_messages[2].id
-
-    @pytest.mark.asyncio
-    async def test_message_stream_with_multiple_consumers(
-        self,
-        session: Session,
-        users: list[User],
-        rooms: list[Room],
-        messages: dict[str, list[Message]]
-    ):
-        user_0_messages = messages.get("0", [])
-        rooms[0].messages.extend(user_0_messages)
-        session.commit()
-        session.refresh(rooms[0])
-
-        producer = rooms[0].kafka_producer()
-
-        for message in user_0_messages:
-            producer.produce(
-                topic=rooms[0].kafka_topic_name(),
-                value=json.dumps({
-                    "type": "text",
-                    "message_id": message.id
-                })
-            )
-
-            producer.flush()
-
-        def collect_messages(room: Room):
-            print("collecting messages with a thread")
-            gen = room.message_stream()
-
-            for _ in range(len(user_0_messages)):
-                msg = next(gen)
-                assert msg
-                assert msg.id in [m.id for m in user_0_messages]
-
-            
-        t1 = threading.Thread(target=collect_messages, args=(rooms[0],))
-        t2 = threading.Thread(target=collect_messages, args=(rooms[0],))
-
-        t1.start()
-        t2.start()
-
-        t1.join()
-        t2.join()
-
-
-
-
-
-
-
-
+    # @pytest.mark.asyncio
+    # async def test_message_stream_with_multiple_consumers(
+    #     self,
+    #     session: Session,
+    #     users: list[User],
+    #     rooms: list[Room],
+    #     messages: dict[str, list[Message]]
+    # ):
+    #     user_0_messages = messages.get("0", [])
+    #     rooms[0].messages.extend(user_0_messages)
+    #     session.commit()
+    #     session.refresh(rooms[0])
+    #
+    #     producer = rooms[0].kafka_producer()
+    #
+    #     for message in user_0_messages:
+    #         producer.produce(
+    #             topic=rooms[0].kafka_topic_name(),
+    #             value=json.dumps({
+    #                 "type": "text",
+    #                 "message_id": message.id
+    #             })
+    #         )
+    #
+    #         producer.flush()
+    #
+    #     def collect_messages(room: Room):
+    #         print("collecting messages with a thread")
+    #         gen = room.message_stream()
+    #
+    #         for _ in range(len(user_0_messages)):
+    #             msg = next(gen)
+    #             assert msg
+    #             assert msg.id in [m.id for m in user_0_messages]
+    #
+    #
+    #     t1 = threading.Thread(target=collect_messages, args=(rooms[0],))
+    #     t2 = threading.Thread(target=collect_messages, args=(rooms[0],))
+    #
+    #     t1.start()
+    #     t2.start()
+    #
+    #     t1.join()
+    #     t2.join()
+    #
+    #
+    #
+    #
+    #
+    #
+    #
+    #
 

@@ -333,4 +333,14 @@ def tony_token_fixture():
 
     return response.json()
 
+@pytest.fixture(name="a_lot_of_rooms")
+def a_lot_of_rooms_fixture(session: Session):
+    for i in range(100):
+        user = User(remote_id=f"{i}")
+        assert user.id
+        room = Room(owner_id=user.id)
+        session.add(user)
+        session.add(room)
+    session.commit()
+        
 
