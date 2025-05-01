@@ -28,6 +28,7 @@ POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
 POSTGRES_DB = os.environ.get("POSTGRES_DB")
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
 POSTGRES_USER = os.environ.get("POSTGRES_USER")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 
 engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
     pool_size=10,

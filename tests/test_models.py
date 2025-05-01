@@ -25,22 +25,6 @@ class TestUser:
 
 class TestRoom:
 
-    # @pytest.mark.asyncio
-    # async def test_create_room(self, session: Session, users: list[User]):
-    #     assert users[0].id
-    #     room = Room(owner_id=users[0].id)
-    #     session.add(room)
-    #     session.commit()
-    #
-    #     assert room.owner_id == users[0].id
-    #     assert room.room_type == RoomType.UNIVERSAL
-    #     assert room.participants == []
-
-        # # check if the kafka topic is created
-        # admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
-        # topics = admin_client.list_topics(topic=room.kafka_topic_name()).topics
-        # assert f"room-{room.id}" in topics.keys()
-
     @pytest.mark.asyncio
     async def test_add_participant(
         self, session: Session, users: list[User], rooms: list[Room]
