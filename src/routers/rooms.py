@@ -5,10 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_filter import FilterDepends
 from sqlmodel import Session, or_, select
 from sqlalchemy.exc import IntegrityError
-from starlette.types import Message
 
 from ..dependencies import get_session, get_user_dep, DEFAULT_UNIVERSAL_GROUP_EXPIRY
-from ..models import Room, RoomCreate, RoomNotFoundException, RoomParticipantLink, RoomType, User, UserNotFoundException
+from ..models import Room, RoomCreate, RoomMessagesLink, RoomNotFoundException, RoomParticipantLink, RoomType, User, UserNotFoundException, Message
 from ..filters import RoomFilter
 
 router = APIRouter(
@@ -196,6 +195,8 @@ async def get_room_messages(
     room_id: str,
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
+    offset: Annotated[int | None, Query()] = None,
+    limit: Annotated[int | None, Query()] = None
 ):
 
     # await remove_expired_rooms_once(60)
@@ -208,8 +209,21 @@ async def get_room_messages(
     if not await room.is_user_in_room(user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
-        )
+    )
 
     assert room is not None
-    return room.messages
+
+    query = (
+        select(Message)
+            .join(RoomMessagesLink)
+            .where(RoomMessagesLink.room_id == room_id)
+            .offset(offset)
+            .limit(limit)
+    )
+
+    messages = session.exec(query).all()
+
+    return messages
+
+
 
