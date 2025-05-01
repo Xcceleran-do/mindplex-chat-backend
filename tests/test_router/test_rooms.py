@@ -162,8 +162,6 @@ class TestGetRooms:
             assert room["id"] not in [room.id for room in dave_participated_rooms]
             assert room["id"] not in [room.id for room in dave_unlinked_rooms]
 
-    
-
     def test_rooms_filter_owner__remote_id(
             self,
             token: str,
@@ -187,7 +185,6 @@ class TestGetRooms:
             assert room["id"] in [room.id for room in dave_owned_rooms]
             assert room["id"] not in [room.id for room in dave_participated_rooms]
             assert room["id"] not in [room.id for room in dave_unlinked_rooms]
-
 
     def test_rooms_filter_participants__user_id(
         self,
@@ -251,6 +248,31 @@ class TestGetRooms:
 
         assert len(data) == len(dave_2_private_room)
 
+    def test_pagination(
+            self,
+            token: str,
+            client: TestClient,
+            a_lot_of_rooms: list[Room],
+    ):
+        # offset 0
+        response = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"limit": 5, "offset": 0}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 5
+
+        # offset 5
+        response2 = client.get(
+            "/rooms/",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"limit": 50, "offset": 60}
+        )
+        assert response2.status_code == 200
+        data = response2.json()
+        assert len(data) == 40
 
 class TestGetRoom:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
