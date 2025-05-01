@@ -12,6 +12,7 @@ dotenv.load_dotenv()
 class MindplexApiException(Exception):
     pass
 
+
 class MindplexUser(BaseModel):
     """Mindplex data necessary for the chat app"""
     username: str

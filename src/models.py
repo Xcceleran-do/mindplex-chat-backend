@@ -2,8 +2,9 @@ from datetime import datetime
 from enum import Enum
 import os
 import json
-from typing import Annotated, Generator, Optional
+from typing import Annotated, Any, Generator, Optional
 from pydantic import BaseModel
+from sqlalchemy import event
 from sqlmodel import (
     Relationship,
     Field,
@@ -18,7 +19,8 @@ import psycopg2
 from psycopg2 import OperationalError
 import secrets
 import time
-from confluent_kafka import Producer, Consumer, KafkaException, KafkaError
+from confluent_kafka import Producer, Consumer, KafkaException, KafkaError 
+from confluent_kafka.admin import AdminClient, NewTopic
 
 
 POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
@@ -32,7 +34,6 @@ TEST_POSTGRES_HOST = os.environ.get("TEST_POSTGRES_HOST")
 TEST_POSTGRES_DB = os.environ.get("TEST_POSTGRES_DB")
 TEST_POSTGRES_PORT = os.environ.get("TEST_POSTGRES_PORT")
 TEST_POSTGRES_USER = os.environ.get("TEST_POSTGRES_USER")
-
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 
@@ -78,6 +79,13 @@ def generate_id():
 class RoomType(str, Enum):
     UNIVERSAL = "universal"
     PRIVATE = "private"
+
+
+class RoomTopicStatus(str, Enum):
+    NOT_CREATED = "not_created"
+    PENDING = "pending"
+    CREATED = "created"
+    EXISTS = "exists"
 
 
 class RoomParticipantLink(SQLModel, table=True):
@@ -166,16 +174,9 @@ class Room(RoomBase, table=True):
     created: datetime = Field(default_factory=datetime.now)
     last_interacted: datetime = Field(default_factory=datetime.now)
 
-    __kafka_topic_prefix__ = "room"
-    __kafka_group_prefix__ = "group"
-
-    def kafka_topic(self):
-        return f"{self.__kafka_topic_prefix__}-{self.id}"
-
-    def kafka_group(self):
-        return f"{self.__kafka_group_prefix__}-{self.id}"
-
-
+    _kafka_topic_prefix = "room"
+    _kafka_group_prefix = "group"
+    _create_topic_status: RoomTopicStatus  = RoomTopicStatus.NOT_CREATED
 
     async def add_participant(self, participant: "User"):
         """add a participant to the room and commit to db.
@@ -257,7 +258,7 @@ class Room(RoomBase, table=True):
             raise RoomNotFoundException("Room not found")
         return room
 
-    async def send_message(self, message: "Message"):
+    async def send_message(self, messages: list["Message"]):
         """send a message to a kafka topic representing the room. make sure
         that the message in question is refreshed before sending as this might
         cause a race condition.
@@ -273,44 +274,39 @@ class Room(RoomBase, table=True):
             Message: the message that is sent
         """
 
-        producer = Producer({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
+        producer = self.kafka_producer()
 
-        if not await self.is_message_in_room(message):
-            raise RoomValidationException("Message is not in the room")
+        for message in messages:
+            if message.id == None:
+                raise MessageNotFoundException("message id is not set")
 
-        if self.id == None:
-            raise RoomNotFoundException("room id is not set")
+            if not await self.is_message_in_room(message):
+                raise RoomValidationException("Message is not in the room")
 
-        if message.id == None:
-            raise MessageNotFoundException("message id is not set")
+            if self.id == None:
+                raise RoomNotFoundException("room id is not set")
 
-        producer.produce(
-            self.kafka_topic(),
-            json.dumps(
-                {
-                    "type": "text",
-                    "message_id": message.id
-                }
-            ).encode('utf-8')
-        )
-        producer.flush()
-        return {"status": "message sent"}
+            producer.produce(
+                self.kafka_topic_name(),
+                json.dumps(
+                    {
+                        "type": "text",
+                        "message_id": message.id
+                    }
+                ).encode('utf-8')
+            )
+            producer.flush()
+
+        return messages
 
     def message_stream(self) -> Generator[Optional["Message"], None, None]:
         """ Generates a stream of messages from a kafka topic representing the room
 
         Yields:
             Message: the message
-
-
         """
-        consumer = Consumer({
-            'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
-            'group.id': self.kafka_group(),
-            'auto.offset.reset': 'earliest'
-        })
-    
-        consumer.subscribe([self.kafka_topic()])
+        consumer = self.kafka_consumer()
+        consumer.subscribe([self.kafka_topic_name()])
     
         try:
             while True:
@@ -333,6 +329,68 @@ class Room(RoomBase, table=True):
         finally:
             consumer.close()
 
+    def kafka_topic_name(self):
+        return f"{self._kafka_topic_prefix}-{self.id}"
+
+    def kafka_group_name(self):
+        return f"{self._kafka_group_prefix}-{self.id}"
+
+    def kafka_consumer(self):
+        consumer = Consumer({
+            'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
+            'group.id': self.kafka_group_name(),
+            'auto.offset.reset': 'earliest'
+        })
+
+        # check if the topic exists 
+        # creates the topic if it doesn't exist
+        topic = consumer.list_topics(topic=self.kafka_topic_name()).topics.get(self.kafka_topic_name())
+
+        if topic is None:
+            raise KafkaException(f"Topic {self.kafka_topic_name()} does not exist")
+
+        consumer.subscribe([self.kafka_topic_name()])
+
+        return consumer
+
+    def kafka_producer(self):
+        return Producer({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
+
+    def create_kafka_topic(self) -> Optional[Any]:
+        """ Creates a kafka topic for the room. does nothing if the topic already exists
+
+        Raises:
+        """
+
+        admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
+        partitions = 2 if self.room_type == RoomType.PRIVATE else 6
+
+        try:
+            topic_future = admin_client.create_topics(
+                [
+                    NewTopic(
+                        topic=self.kafka_topic_name(),
+                        num_partitions=partitions,
+                        replication_factor=1,
+                    )
+                ]
+            )
+            topic_future[self.kafka_topic_name()].result(10)
+
+        except KafkaException as ke:
+            if ke.args[0].error == KafkaError.TOPIC_ALREADY_EXISTS:
+                return None 
+            else:
+                raise
+
+    @property
+    def create_topic_status(self): 
+        return self._create_topic_status
+
+    @create_topic_status.setter
+    def create_topic_status(self, value: RoomTopicStatus):
+        self._create_topic_status = value
+
 
 class RoomCreate(RoomBase):
     participants: list[str] = Field(default=[])
@@ -351,13 +409,12 @@ class Message(SQLModel, table=True):
         back_populates="messages", link_model=RoomMessagesLink
     )
 
-# Exceptions
 
-class RoomValidationException(Exception):
+class RoomNotFoundException(Exception):
     pass
 
 
-class RoomNotFoundException(Exception):
+class RoomValidationException(Exception):
     pass
 
 

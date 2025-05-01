@@ -2,14 +2,14 @@ from datetime import datetime, timedelta
 import uuid
 import pytest
 from src.api import Mindplex, MindplexUser
-from src.models import RoomType, SQLModel, Room, User, Message, engine, Session
+from src.models import RoomType, SQLModel, Room, User, Message, engine, Session, KAFKA_BOOTSTRAP_SERVERS 
 from src.main import app, DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 import httpx
 import pytest_asyncio
 import os
-
+from confluent_kafka import Producer, Consumer, KafkaException, KafkaError
 
 @pytest.fixture(autouse=True)
 def set_env_vars(monkeypatch):
@@ -270,6 +270,7 @@ def message_fixture(session: Session, users: list[User], rooms: list[Room]):
         "2": [message6, message7],
     }
 
+
 @pytest_asyncio.fixture(name="room_with_messages")
 async def room_with_messages_fixture(session: Session, messages: dict[str, list[Message]], users: list[User]):
     assert users[0].id
@@ -293,8 +294,6 @@ async def room_with_messages_fixture(session: Session, messages: dict[str, list[
     return [room1, room2]
 
 
-
-
 @pytest.fixture(name="token")
 def user_token_fixture():
 
@@ -312,7 +311,6 @@ def user_token_fixture():
 
     return response.json()['token']
 
-
 @pytest.fixture(name="tony_token")
 def tony_token_fixture():
 
@@ -327,3 +325,5 @@ def tony_token_fixture():
     response = httpx.post(url, data=payload)
 
     return response.json()
+
+

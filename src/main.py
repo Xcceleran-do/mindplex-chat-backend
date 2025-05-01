@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from confluent_kafka import Producer, Consumer, KafkaException, KafkaError
 
 from .dependencies import DEFAULT_UNIVERSAL_GROUP_EXPIRY
-from . import sock
+from . import socket
 from .models import SQLModel, engine
 from .tasks import remove_expired_rooms_once
 from .routers import users, rooms
@@ -28,7 +28,7 @@ app = FastAPI(lifespan=lifespan)
 
 
 # routers
-app.include_router(sock.router)
+app.include_router(socket.router)
 app.include_router(users.router)
 app.include_router(rooms.router)
 
