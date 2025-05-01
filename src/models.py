@@ -291,27 +291,38 @@ class Room(RoomBase, table=True):
         Yields:
             Message: the message
         """
+        print("before kafka subscribe")
         consumer = self.kafka_consumer()
-        consumer.subscribe([self.kafka_topic_name()])
-    
+        print("after kafka subscribe")
+
         try:
+            print("entering polling loop")
             while True:
+                print("polling kafka")
                 msg = consumer.poll(1.0)
 
                 if msg is None:
+                    print("no message")
                     continue
                 if msg.error():
+                    print("error: ", msg.error())
                     # don't crash if the topic does not exist
                     if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
                         yield None
                         break
                     raise KafkaException(msg.error())
 
+                print("got message: ", msg.value().decode('utf-8'))
                 msg = json.loads(msg.value().decode('utf-8'))
 
                 with Session(engine) as session:
+                    print("fetching message from the database")
                     message = session.exec(select(Message).where(Message.id == msg["message_id"])).first()
                     yield message
+
+        except KeyboardInterrupt:
+            print("exiting message stream")
+            consumer.close()
         finally:
             consumer.close()
 

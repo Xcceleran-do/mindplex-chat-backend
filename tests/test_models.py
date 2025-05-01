@@ -4,6 +4,7 @@ import json
 from sqlmodel import Session, select, delete, or_
 from .fixtures import *
 from confluent_kafka.admin import AdminClient
+import threading
 
 
 class TestUser:
@@ -252,6 +253,50 @@ class TestRoom:
         assert msg3
         assert msg3.id == user_0_messages[2].id
 
+    @pytest.mark.asyncio
+    async def test_message_stream_with_multiple_consumers(
+        self,
+        session: Session,
+        users: list[User],
+        rooms: list[Room],
+        messages: dict[str, list[Message]]
+    ):
+        user_0_messages = messages.get("0", [])
+        rooms[0].messages.extend(user_0_messages)
+        session.commit()
+        session.refresh(rooms[0])
+
+        producer = rooms[0].kafka_producer()
+
+        for message in user_0_messages:
+            producer.produce(
+                topic=rooms[0].kafka_topic_name(),
+                value=json.dumps({
+                    "type": "text",
+                    "message_id": message.id
+                })
+            )
+
+            producer.flush()
+
+        def collect_messages(room: Room):
+            print("collecting messages with a thread")
+            gen = room.message_stream()
+
+            for _ in range(len(user_0_messages)):
+                msg = next(gen)
+                assert msg
+                assert msg.id in [m.id for m in user_0_messages]
+
+            
+        t1 = threading.Thread(target=collect_messages, args=(rooms[0],))
+        t2 = threading.Thread(target=collect_messages, args=(rooms[0],))
+
+        t1.start()
+        t2.start()
+
+        t1.join()
+        t2.join()
 
 
 
