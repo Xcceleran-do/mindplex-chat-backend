@@ -2,9 +2,7 @@ from datetime import datetime
 from enum import Enum
 import os
 import json
-from typing import Annotated, Any, Generator, Optional
-from pydantic import BaseModel
-from sqlalchemy import event
+from typing import Any, Generator, Optional
 from sqlmodel import (
     Relationship,
     Field,
@@ -14,7 +12,7 @@ from sqlmodel import (
     create_engine,
     select,
 )
-from .api import MindplexUser, Mindplex, MindplexApiException
+from .api import Mindplex, MindplexApiException
 import psycopg2
 from psycopg2 import OperationalError
 import secrets
