@@ -153,7 +153,7 @@ class Room(RoomBase, table=True):
         back_populates="rooms", link_model=RoomMessagesLink
     )
 
-    owner_id: str = Field(foreign_key="user.id")
+    owner_id: str = Field(foreign_key="user.id", ondelete="CASCADE")
     owner: User = Relationship(back_populates="owned_rooms")
     created: datetime = Field(default_factory=datetime.now)
     last_interacted: datetime = Field(default_factory=datetime.now)
@@ -396,7 +396,7 @@ class Message(SQLModel, table=True):
     text: str
     created: datetime = Field(default_factory=datetime.now)
 
-    owner_id: str = Field(default=None, foreign_key="user.id", ondelete="CASCADE")
+    owner_id: str = Field(foreign_key="user.id", ondelete="CASCADE")
     owner: User = Relationship(back_populates="messages")
 
     # room_id: str | None = Field(default=None, foreign_key="room.id")

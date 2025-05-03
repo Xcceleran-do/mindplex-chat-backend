@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from fastapi_filter.contrib.sqlalchemy import Filter
 from fastapi_filter import FilterDepends, with_prefix
@@ -15,12 +16,17 @@ class UserFilter(Filter):
 class RoomFilter(Filter):
     owner_id: Optional[UserFilter] = FilterDepends(with_prefix("owner", UserFilter))
     room_type: Optional[RoomType] = None
+
     class Constants(Filter.Constants):
         model = Room
 
 
 class MessageFilter(Filter):
-    owner_id: Optional[UserFilter] = FilterDepends(with_prefix("owner", UserFilter))
-    room_id: Optional[RoomFilter] = FilterDepends(with_prefix("room", RoomFilter))
+    owner_id: Optional[str] = None  # TODO: FilterDepends
+    created__gt: Optional[datetime] = None
+    created__lt: Optional[datetime] = None
+    created__gte: Optional[datetime] = None
+    created__lte: Optional[datetime] = None
+
     class Constants(Filter.Constants):
-        model = Room
+        model = Message

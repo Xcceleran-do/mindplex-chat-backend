@@ -8,7 +8,8 @@ from sqlalchemy.exc import IntegrityError
 
 from ..dependencies import get_session, get_user_dep, DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from ..models import Room, RoomCreate, RoomMessagesLink, RoomNotFoundException, RoomParticipantLink, RoomType, User, UserNotFoundException, Message
-from ..filters import RoomFilter
+from ..filters import MessageFilter, RoomFilter
+from sqlalchemy.dialects import postgresql  # or the appropriate dialect you're using
 
 router = APIRouter(
     prefix="/rooms",
@@ -195,11 +196,10 @@ async def get_room_messages(
     room_id: str,
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
-    offset: Annotated[int | None, Query()] = None,
-    limit: Annotated[int | None, Query()] = None
+    filter: MessageFilter = FilterDepends(MessageFilter),
+    offset: Annotated[Optional[int], Query()] = None,
+    limit: Annotated[Optional[int], Query()] = None
 ):
-
-    # await remove_expired_rooms_once(60)
 
     room = await Room.get_by_id(room_id, session, raise_exc=False)
 
@@ -217,11 +217,27 @@ async def get_room_messages(
         select(Message)
             .join(RoomMessagesLink)
             .where(RoomMessagesLink.room_id == room_id)
-            .offset(offset)
-            .limit(limit)
     )
+    print("query1")
+    print(query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    query = filter.filter(query)
+
+    print("query2")
+    print(query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+    # paginate
+
+    if offset is None:
+        offset = 0
+
+    if limit is not None:
+        query = query.limit(limit)
+        query = query.offset(offset)
+
 
     messages = session.exec(query).all()
+    print("messages: ", messages)
 
     return messages
 

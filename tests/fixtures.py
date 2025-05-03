@@ -349,16 +349,28 @@ def a_lot_of_rooms_fixture(session: Session):
 @pytest.fixture(name="a_lot_of_messages")
 def a_lot_of_messages_fixture(session: Session, users: list[User], rooms: list[Room]):
     all_messages: list[Message] = []
+    flip = 1
     for i in range(50):
-        message = Message(text=f"message {i} by {users[0].remote_id}", owner=users[0])
+        message = Message(
+            text=f"message {i} by {users[0].remote_id}",
+            owner=users[0],
+            created=datetime.now()+timedelta(days=i+1),
+        )
         session.add(message)
         all_messages.append(message)
+        flip *= -1
     session.commit()
 
+    flip = 1
     for i in range(50):
-        message = Message(text=f"message {i} by {users[1].remote_id}", owner=users[1])
+        message = Message(
+            text=f"message {i} by {users[1].remote_id}",
+            owner=users[1],
+            created=datetime.now()-timedelta(days=i+1),
+        )
         session.add(message)
         all_messages.append(message)
+        flip *= -1
     session.commit()
 
     rooms[0].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 0]  # even

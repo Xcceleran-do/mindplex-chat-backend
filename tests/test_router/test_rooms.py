@@ -489,6 +489,64 @@ class TestGetRoomMessages:
             assert message["id"] in [message.id for message in rooms[0].messages]
             assert message["id"] not in [message.id for message in rooms[1].messages]
 
+    def test_owner_filter(
+        self,
+        token: dict[str, Any],
+        client: TestClient,
+        users: list[User],
+        rooms: list[Room],
+        a_lot_of_messages: list[Message],
+    ):
+        response = client.get(
+            f"/rooms/{rooms[0].id}/messages",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"owner_id": users[0].id}
+        )
+        data = response.json()
+
+        assert response.status_code == 200
+        assert len(data) == 25
+
+        for message in data:
+            assert message["owner_id"] == users[0].id
+
+    def test_created_relational_filters(
+        self,
+        token: dict[str, Any],
+        client: TestClient,
+        users: list[User],
+        rooms: list[Room],
+        a_lot_of_messages: list[Message],
+    ):
+        # created__lt
+        response = client.get(
+            f"/rooms/{rooms[0].id}/messages",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"created__lt": datetime.now().isoformat()},
+        )
+        data = response.json()
+
+        assert response.status_code == 200
+        assert len(data) == 25
+
+        for message in data:
+            assert datetime.fromisoformat(message["created"]) < datetime.now()
+
+        # created__gt
+        response2 = client.get(
+            f"/rooms/{rooms[0].id}/messages",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            params={"created__gt": datetime.now().isoformat()},
+        )
+        data2 = response2.json()
+
+        assert response.status_code == 200
+        assert len(data2) == 25
+
+        for message in data2:
+            assert datetime.fromisoformat(message["created"]) > datetime.now()
+
+
 
 class TestGetRoomParticipants:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
