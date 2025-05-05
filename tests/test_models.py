@@ -75,36 +75,6 @@ class TestRoom:
         assert exc_info.value
         assert exc_info.value.args[0] == "Room is private"
 
-    # @pytest.mark.asyncio
-    # async def test_add_message(
-    #     self,
-    #     session: Session,
-    #     users: list[User],
-    #     rooms: list[Room],
-    #     messages: dict[str, list[Message]],
-    # ):
-    #     assert rooms[0].messages == []
-    #
-    #     exc_info = None
-    #     with pytest.raises(RoomValidationException) as e:
-    #         exc_info = e
-    #         await rooms[1].add_message(messages.get("2", [])[0])
-    #         session.commit()
-    #
-    #     assert exc_info
-    #     assert exc_info.value
-    #     assert exc_info.value.args[0] == "User is not in the room"
-    #
-    #     await rooms[0].add_participant(users[1])
-    #     session.commit()
-    #
-    #     message = await rooms[0].add_message(messages.get("0", [])[0])
-    #     session.commit()
-    #
-    #     assert message
-    #     assert message.owner == users[0]
-    #     assert message in rooms[0].messages
-
     @pytest.mark.asyncio
     async def test_is_user_in_room(
         self, session: Session, users: list[User], rooms: list[Room]

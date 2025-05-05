@@ -71,7 +71,7 @@ class WSMessageType(str, Enum):
 class WSMessage(BaseModel):
     type: WSMessageType
     message: Optional[Message | str] 
-    sender: Optional[User]
+    sender: Optional[User]  # TODO: deprecate
 
     class Config:
         arbitrary_types_allowed = True
@@ -175,9 +175,8 @@ async def websocket_endpoint(
                 user = await User.from_remote_or_db(user_id, session)  # user must exist in local db
                 assert room
 
-                message = Message(owner=user, text=data.message)
+                message = Message(owner=user, text=data.message, room=room)
 
-                await room.add_message(message)
                 session.add(message)
                 session.commit()
                 session.refresh(message)
