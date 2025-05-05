@@ -547,7 +547,6 @@ class TestGetRoomMessages:
             assert datetime.fromisoformat(message["created"]) > datetime.now()
 
 
-
 class TestGetRoomParticipants:
     def test_auth(self, token: dict[str, Any], client: TestClient, rooms: list[Room]):
         response = client.get(
@@ -679,6 +678,36 @@ class TestGetRoomParticipants:
 
     def test_room_response_with_messages_and_participants(self, token, client, dave_participated_rooms):
         pass
+
+
+class TestSendMessage:
+    def test_send_message(self, token, client: TestClient, session: Session, rooms):
+        response = client.post(
+            f"/rooms/{rooms[0].id}/messages",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            json={"text": "hello world"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["text"] == "hello world"
+        db_message = session.exec(
+            select(Message).where(Message.id == data["id"])
+        ).first() 
+        assert db_message
+        assert db_message.room_id == rooms[0].id
+        assert db_message.text == "hello world"
+
+    def test_user_not_in_room(self, token, client: TestClient, rooms):
+        response = client.post(
+            f"/rooms/{rooms[1].id}/messages",
+            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+            json={"text": "hello world"}
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "User does not have access to this room"
+
 
 
 

@@ -77,13 +77,6 @@ class RoomParticipantLink(SQLModel, table=True):
     room_id: str | None = Field(default=None, foreign_key="room.id", primary_key=True, ondelete="CASCADE")
 
 
-class RoomMessagesLink(SQLModel, table=True):
-    message_id: str | None = Field(
-        default=None, foreign_key="message.id", primary_key=True, ondelete="CASCADE"
-    )
-    room_id: str | None = Field(default=None, foreign_key="room.id", primary_key=True, ondelete="CASCADE")
-
-
 class User(SQLModel, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
     remote_id: str = Field(unique=True)
@@ -133,8 +126,8 @@ class User(SQLModel, table=True):
             session.refresh(user)
             return user
         except MindplexApiException:
-            # TODO: log error
             raise UserNotFoundException(
+                # TODO: log error
                 f"User with remote id {remote_id} not found"
             )
 
@@ -149,10 +142,7 @@ class Room(RoomBase, table=True):
     participants: list[User] = Relationship(
         back_populates="rooms", link_model=RoomParticipantLink
     )
-    messages: list["Message"] = Relationship(
-        back_populates="rooms", link_model=RoomMessagesLink
-    )
-
+    messages: list["Message"] = Relationship(back_populates="room")
     owner_id: str = Field(foreign_key="user.id", ondelete="CASCADE")
     owner: User = Relationship(back_populates="owned_rooms")
     created: datetime = Field(default_factory=datetime.now)
@@ -178,7 +168,7 @@ class Room(RoomBase, table=True):
         self.participants.append(participant)
 
     async def add_message(self, message: "Message"):
-        """add a message to the room.
+        """**Deprecated** add a message to the room.
 
         Args:
             message (Message): the message to add
@@ -391,18 +381,23 @@ class RoomCreate(RoomBase):
     participants: list[str] = Field(default=[])
 
 
-class Message(SQLModel, table=True):
-    id: str | None = Field(default_factory=generate_id, primary_key=True)
+class MessageBase(SQLModel):
     text: str
+
+
+class MessageCreate(MessageBase):
+    pass
+
+
+class Message(MessageBase, table=True):
+    id: str | None = Field(default_factory=generate_id, primary_key=True)
     created: datetime = Field(default_factory=datetime.now)
 
     owner_id: str = Field(foreign_key="user.id", ondelete="CASCADE")
     owner: User = Relationship(back_populates="messages")
 
-    # room_id: str | None = Field(default=None, foreign_key="room.id")
-    rooms: list[Room] = Relationship(
-        back_populates="messages", link_model=RoomMessagesLink
-    )
+    room_id: str = Field(foreign_key="room.id", ondelete="CASCADE")
+    room: Room = Relationship(back_populates="messages")
 
 
 class RoomNotFoundException(Exception):

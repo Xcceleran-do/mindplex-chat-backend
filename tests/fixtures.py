@@ -21,7 +21,6 @@ def set_env_vars(monkeypatch):
     monkeypatch.setenv("POSTGRES_PORT", "5432")
 
 
-
 @pytest.fixture
 def client():
     """Provide a FastAPI test client."""
@@ -253,47 +252,64 @@ def dave_private_rooms_fixture(session: Session, users: list[User]):
     return [room, room2]
 
 
-@pytest.fixture(name="messages")
-def message_fixture(session: Session, users: list[User], rooms: list[Room]):
-    message = Message(text="test message", owner=users[0])
-    message2 = Message(text="Hello world", owner=users[0])
-    message3 = Message(text="Whats up", owner=users[0])
-    message4 = Message(text="", owner=users[1])
-    message5 = Message(text="Bye!!!", owner=users[1])
-    message6 = Message(text="another message", owner=users[2])
-    message7 = Message(text="yet another message", owner=users[2])
-    session.add(message)
+# @pytest.fixture(name="messages")
+# def message_fixture(session: Session, users: list[User], rooms: list[Room]):
+#     message = Message(text="test message", owner=users[0])
+#     message2 = Message(text="Hello world", owner=users[0])
+#     message3 = Message(text="Whats up", owner=users[0])
+#     message4 = Message(text="", owner=users[1])
+#     message5 = Message(text="Bye!!!", owner=users[1])
+#     message6 = Message(text="another message", owner=users[2])
+#     message7 = Message(text="yet another message", owner=users[2])
+#     session.add(message)
+#     session.add(message2)
+#     session.add(message3)
+#     session.add(message4)
+#     session.add(message5)
+#     session.add(message6)
+#     session.add(message7)
+#     session.commit()
+#
+#     return {
+#         "0": [message, message2, message3],
+#         "1": [message4, message5],
+#         "2": [message6, message7],
+#     }
+#
+
+@pytest_asyncio.fixture(name="room_with_messages")
+async def room_with_messages_fixture(session: Session, users: list[User]):
+    assert users[0].id
+    room1 = Room(owner_id=users[0].id)
+    # create messages for room 1
+
+    message1 = Message(text="test message", owner=users[0], room=room1)
+    message2 = Message(text="Hello world", owner=users[0], room=room1)
+    message4 = Message(text="", owner=users[1], room=room1)
+    message6 = Message(text="another message", owner=users[2], room=room1)
+
+
+    # await room1.add_message(messages["0"][0])
+    # await room1.add_message(messages["1"][0])
+    # await room1.add_message(messages["2"][0])
+    # await room1.add_message(messages["0"][1])
+
+    room2 = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE, participants=[users[1]])
+    message3 = Message(text="Whats up", owner=users[0], room=room2)
+    message5 = Message(text="Bye!!!", owner=users[1], room=room2)
+    message7 = Message(text="yet another message", owner=users[2], room=room2)
+
+    # await room2.add_message(messages["0"][1])
+    # await room2.add_message(messages["1"][1])
+    # await room2.add_message(messages["0"][1])
+
+    session.add(message1)
     session.add(message2)
     session.add(message3)
     session.add(message4)
     session.add(message5)
     session.add(message6)
     session.add(message7)
-    session.commit()
-
-    return {
-        "0": [message, message2, message3],
-        "1": [message4, message5],
-        "2": [message6, message7],
-    }
-
-
-@pytest_asyncio.fixture(name="room_with_messages")
-async def room_with_messages_fixture(session: Session, messages: dict[str, list[Message]], users: list[User]):
-    assert users[0].id
-    room1 = Room(owner_id=users[0].id)
-    session.commit()
-    await room1.add_message(messages["0"][0])
-    await room1.add_message(messages["1"][0])
-    await room1.add_message(messages["2"][0])
-    await room1.add_message(messages["0"][1])
-
-    room2 = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE, participants=[users[1]])
-    await room2.add_message(messages["0"][1])
-    await room2.add_message(messages["1"][1])
-    await room2.add_message(messages["0"][1])
-
-
     session.add(room1)
     session.add(room2)
     session.commit()
@@ -351,10 +367,12 @@ def a_lot_of_messages_fixture(session: Session, users: list[User], rooms: list[R
     all_messages: list[Message] = []
     flip = 1
     for i in range(50):
+        room = rooms[0] if i % 2 == 0 else rooms[1]
         message = Message(
             text=f"message {i} by {users[0].remote_id}",
             owner=users[0],
             created=datetime.now()+timedelta(days=i+1),
+            room=room
         )
         session.add(message)
         all_messages.append(message)
@@ -363,18 +381,20 @@ def a_lot_of_messages_fixture(session: Session, users: list[User], rooms: list[R
 
     flip = 1
     for i in range(50):
+        room = rooms[0] if i % 2 == 0 else rooms[1]
         message = Message(
             text=f"message {i} by {users[1].remote_id}",
             owner=users[1],
             created=datetime.now()-timedelta(days=i+1),
+            room=room
         )
         session.add(message)
         all_messages.append(message)
         flip *= -1
     session.commit()
 
-    rooms[0].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 0]  # even
-    rooms[1].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 1]  # odd
+    # rooms[0].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 0]  # even
+    # rooms[1].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 1]  # odd
 
     session.commit()
 

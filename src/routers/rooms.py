@@ -7,14 +7,16 @@ from sqlmodel import Session, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from ..dependencies import get_session, get_user_dep, DEFAULT_UNIVERSAL_GROUP_EXPIRY
-from ..models import Room, RoomCreate, RoomMessagesLink, RoomNotFoundException, RoomParticipantLink, RoomType, User, UserNotFoundException, Message
+from ..models import Room, RoomCreate, RoomNotFoundException, RoomParticipantLink, RoomType, User, UserNotFoundException, Message, MessageCreate
 from ..filters import MessageFilter, RoomFilter
 from sqlalchemy.dialects import postgresql  # or the appropriate dialect you're using
+
 
 router = APIRouter(
     prefix="/rooms",
     tags=["rooms"],
 )
+
 
 @router.get("/", response_model=list[Room])
 async def get_rooms(
@@ -32,7 +34,6 @@ async def get_rooms(
         .join(
             User,
             User.id == Room.owner_id,
-            # isouter=True
         )
         .join(
             RoomParticipantLink,
@@ -215,16 +216,10 @@ async def get_room_messages(
 
     query = (
         select(Message)
-            .join(RoomMessagesLink)
-            .where(RoomMessagesLink.room_id == room_id)
+            .where(Message.room_id == room_id)
     )
-    print("query1")
-    print(query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
 
     query = filter.filter(query)
-
-    print("query2")
-    print(query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
 
     # paginate
 
@@ -235,11 +230,37 @@ async def get_room_messages(
         query = query.limit(limit)
         query = query.offset(offset)
 
-
     messages = session.exec(query).all()
-    print("messages: ", messages)
 
     return messages
+
+
+@router.post("/{room_id}/messages", response_model=Message)
+async def send_message(
+    room_id: str,
+    message: MessageCreate,
+    session: Annotated[Session, Depends(get_session)],
+    user: Annotated[User, Depends(get_user_dep)],
+):
+    room = await Room.get_by_id(room_id, session, raise_exc=True)
+    assert room
+
+    if not await room.is_user_in_room(user):
+        raise HTTPException(
+            status_code=403, detail="User does not have access to this room"
+        )
+
+    try:
+        db_message = Message(**message.model_dump(), owner=user, room=room)
+        session.add(db_message)
+        session.commit()
+        session.refresh(db_message)
+    except IntegrityError as e:
+        raise HTTPException(status_code=400, detail="message already exists")
+
+    # send message to kafka
+
+    return db_message
 
 
 
