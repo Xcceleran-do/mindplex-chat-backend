@@ -252,11 +252,15 @@ async def send_message(
 
     try:
         db_message = Message(**message.model_dump(), owner=user, room=room)
+        room.last_interacted = datetime.now()  # update last interacted
+
         session.add(db_message)
+        session.add(room)
         session.commit()
         session.refresh(db_message)
     except IntegrityError as e:
         raise HTTPException(status_code=400, detail="message already exists")
+
 
     # send message to kafka
 
