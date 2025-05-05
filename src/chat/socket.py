@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from pydantic import BaseModel, ValidationError, model_validator
 from fastapi import WebSocket
 from sqlmodel import select
-from .dependencies import get_session, get_user_from_qp_dep
-from .models import Message, Room, RoomType, Session, User, engine
+from ..dependencies import get_session, get_user_from_qp_dep
+from ..models import Message, Room, RoomType, Session, User, engine
 import dotenv
 
 dotenv.load_dotenv()
