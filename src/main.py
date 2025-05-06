@@ -48,6 +48,3 @@ async def remove_expired_rooms(request, call_next):
     await remove_expired_rooms_once(DEFAULT_UNIVERSAL_GROUP_EXPIRY)
     response = await call_next(request)
     return response
-
-# test kafka
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
