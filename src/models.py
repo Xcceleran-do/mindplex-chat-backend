@@ -269,6 +269,7 @@ class Room(RoomBase, table=True):
             message (Message): the message to send
 
         Raises:
+            MessageNotFoundException: if the message id is not set(did not persist)
             RoomValidationException: if the message is not in the room
             RoomNotFoundException: if the room is not found in the database
 
@@ -299,6 +300,7 @@ class Room(RoomBase, table=True):
                 callback=self.__class__.ack
             )
             producer.poll(1.0)
+        producer.flush()
 
         return messages
 

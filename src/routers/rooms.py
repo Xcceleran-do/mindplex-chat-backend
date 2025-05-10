@@ -258,8 +258,8 @@ async def send_message(
     except IntegrityError as e:
         raise HTTPException(status_code=400, detail="message already exists")
 
-    # # send message to kafka
-    # sent_msgs = await room.send_message([db_message])
+    # send message to kafka
+    _ = await room.send_message([db_message])
 
     return db_message
 
