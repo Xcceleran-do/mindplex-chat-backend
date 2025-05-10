@@ -1,7 +1,7 @@
 from fastapi import WebSocketDisconnect, WebSocketException
 from fastapi.testclient import TestClient
 from sqlalchemy.sql.compiler import exc
-from .fixtures import *
+from ..fixtures import *
 
 
 class TestConnectionManager:

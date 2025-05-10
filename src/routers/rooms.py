@@ -134,7 +134,7 @@ async def get_room(
     except AssertionError:  # Just in case
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_user_in_room(user):
+    if not await room.is_user_in_room(session, user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )
@@ -171,7 +171,7 @@ async def get_room_participants(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_user_in_room(user):
+    if not await room.is_user_in_room(session, user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )
@@ -207,7 +207,7 @@ async def get_room_messages(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_user_in_room(user):
+    if not await room.is_user_in_room(session, user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
     )
@@ -245,7 +245,7 @@ async def send_message(
     room = await Room.get_by_id(room_id, session, raise_exc=True)
     assert room
 
-    if not await room.is_user_in_room(user):
+    if not await room.is_user_in_room(session, user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )
@@ -258,7 +258,8 @@ async def send_message(
     except IntegrityError as e:
         raise HTTPException(status_code=400, detail="message already exists")
 
-    # send message to kafka
+    # # send message to kafka
+    # sent_msgs = await room.send_message([db_message])
 
     return db_message
 

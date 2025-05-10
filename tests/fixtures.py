@@ -20,7 +20,6 @@ def set_env_vars(monkeypatch):
     monkeypatch.setenv("POSTGRES_HOST", "test_db")
     monkeypatch.setenv("POSTGRES_PORT", "5432")
 
-
 @pytest.fixture
 def client():
     """Provide a FastAPI test client."""
@@ -147,7 +146,7 @@ def unexpired_rooms_fixture(session: Session, users: list[User]):
     session.commit()
 
     return [room, room2, room3]
-    
+ 
 
 @pytest.fixture(name="private_rooms")
 def private_rooms_fixture(session: Session, users: list[User]):
@@ -252,56 +251,24 @@ def dave_private_rooms_fixture(session: Session, users: list[User]):
     return [room, room2]
 
 
-# @pytest.fixture(name="messages")
-# def message_fixture(session: Session, users: list[User], rooms: list[Room]):
-#     message = Message(text="test message", owner=users[0])
-#     message2 = Message(text="Hello world", owner=users[0])
-#     message3 = Message(text="Whats up", owner=users[0])
-#     message4 = Message(text="", owner=users[1])
-#     message5 = Message(text="Bye!!!", owner=users[1])
-#     message6 = Message(text="another message", owner=users[2])
-#     message7 = Message(text="yet another message", owner=users[2])
-#     session.add(message)
-#     session.add(message2)
-#     session.add(message3)
-#     session.add(message4)
-#     session.add(message5)
-#     session.add(message6)
-#     session.add(message7)
-#     session.commit()
-#
-#     return {
-#         "0": [message, message2, message3],
-#         "1": [message4, message5],
-#         "2": [message6, message7],
-#     }
-#
-
 @pytest_asyncio.fixture(name="room_with_messages")
 async def room_with_messages_fixture(session: Session, users: list[User]):
-    assert users[0].id
+    assert users[0].id and users[1].id and users[2].id
     room1 = Room(owner_id=users[0].id)
+    assert room1.id
     # create messages for room 1
 
-    message1 = Message(text="test message", owner=users[0], room=room1)
-    message2 = Message(text="Hello world", owner=users[0], room=room1)
-    message4 = Message(text="", owner=users[1], room=room1)
-    message6 = Message(text="another message", owner=users[2], room=room1)
-
-
-    # await room1.add_message(messages["0"][0])
-    # await room1.add_message(messages["1"][0])
-    # await room1.add_message(messages["2"][0])
-    # await room1.add_message(messages["0"][1])
+    message1 = Message(text="test message", owner_id=users[0].id, room_id=room1.id)
+    message2 = Message(text="Hello world", owner_id=users[0].id, room_id=room1.id)
+    message4 = Message(text="", owner_id=users[1].id, room_id=room1.id)
+    message6 = Message(text="another message", owner_id=users[2].id, room_id=room1.id)
 
     room2 = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE, participants=[users[1]])
-    message3 = Message(text="Whats up", owner=users[0], room=room2)
-    message5 = Message(text="Bye!!!", owner=users[1], room=room2)
-    message7 = Message(text="yet another message", owner=users[2], room=room2)
+    assert room2.id
+    message3 = Message(text="Whats up", owner_id=users[0].id, room_id=room2.id)
+    message5 = Message(text="Bye!!!", owner_id=users[1].id, room_id=room2.id)
+    message7 = Message(text="yet another message", owner_id=users[2].id, room_id=room2.id)
 
-    # await room2.add_message(messages["0"][1])
-    # await room2.add_message(messages["1"][1])
-    # await room2.add_message(messages["0"][1])
 
     session.add(message1)
     session.add(message2)

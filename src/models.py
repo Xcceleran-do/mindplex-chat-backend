@@ -3,6 +3,7 @@ from enum import Enum
 import os
 import json
 from typing import Any, Generator, Optional
+from pydantic import PrivateAttr
 from sqlmodel import (
     Relationship,
     Field,
@@ -10,6 +11,7 @@ from sqlmodel import (
     Session,
     UniqueConstraint,
     create_engine,
+    insert,
     select,
 )
 from .api import Mindplex, MindplexApiException
@@ -135,6 +137,19 @@ class User(SQLModel, table=True):
 class RoomBase(SQLModel):
     room_type: RoomType = Field(default=RoomType.UNIVERSAL)
 
+# with session decorator
+def with_session(func, *args, **kwargs):
+    async def wrapper(*args, **kwargs):
+        session = kwargs.pop("session", None)
+
+        if session is None:
+            with Session(engine) as session:
+                return await func(*args, session=session, **kwargs)
+        else:
+            return await func(*args, session=session, **kwargs)
+
+    return wrapper
+
 
 class Room(RoomBase, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
@@ -148,26 +163,29 @@ class Room(RoomBase, table=True):
     created: datetime = Field(default_factory=datetime.now)
     last_interacted: datetime = Field(default_factory=datetime.now)
 
-    _kafka_topic_prefix = "room"
-    _kafka_group_prefix = "group"
-    _create_topic_status: RoomTopicStatus  = RoomTopicStatus.NOT_CREATED
+    __kafka_topic_prefix__: str = "room"
+    __kafka_group_prefix__: str = "group"
 
-    async def add_participant(self, participant: "User"):
+    # @with_session
+    async def add_participant(self, session: Session, participant: "User"):
         """add a participant to the room and commit to db.
 
         Raises:
             RoomValidationException: if the participant is already in the room
             RoomValidationException: if the room is private and the room has > 2 participants
         """
-        if self.room_type == RoomType.PRIVATE and await self.is_user_in_room(participant):
+
+        if self.room_type == RoomType.PRIVATE and await self.is_user_in_room(session, participant):
             raise RoomValidationException("Participant is already in the room")
 
         if self.room_type == RoomType.PRIVATE and len(self.participants) == 1:
             raise RoomValidationException("Room is private")
 
-        self.participants.append(participant)
+        room_participant = RoomParticipantLink(user_id=participant.id, room_id=self.id)
+        session.add(room_participant)
+        session.commit()
 
-    async def add_message(self, message: "Message"):
+    async def add_message(self, session: Session, message: "Message"):
         """**Deprecated** add a message to the room.
 
         Args:
@@ -181,7 +199,7 @@ class Room(RoomBase, table=True):
             Message: the message that is added
         """
         if (
-            not await self.is_user_in_room(message.owner)
+            not await self.is_user_in_room(session, message.owner)
             and not (self.room_type == RoomType.UNIVERSAL)
         ):
             raise RoomValidationException("User is not in the room")
@@ -193,7 +211,7 @@ class Room(RoomBase, table=True):
     async def is_message_in_room(self, message: "Message"):
         return message in self.messages
 
-    async def is_user_in_room(self, user: "User"):
+    async def is_user_in_room(self, session: Session, user: "User"):
         """checks if a user is in the room as a participant or owner
 
         Args:
@@ -202,15 +220,25 @@ class Room(RoomBase, table=True):
         Returns:
             bool: True if the user is in the room
         """
+        participant_stmt = (
+            select(User)
+            .join(RoomParticipantLink)
+            .where(Room.id == self.id)
+        )
+        participants = session.exec(participant_stmt).all()
+
         return (
-                user in self.participants 
-                or user.id == self.owner_id 
-                or self.room_type == RoomType.UNIVERSAL
+            user.id in [participant.id for participant in participants]
+            or user.id == self.owner_id 
+            or self.room_type == RoomType.UNIVERSAL
         )
 
     @classmethod
     async def get_by_id(
-        cls, room_id: str, session: Session, raise_exc: bool = True
+        cls,
+        room_id: str,
+        session: Session,
+        raise_exc: bool=True
     ) -> Optional["Room"]:
         """Gets a room by id
 
@@ -267,13 +295,14 @@ class Room(RoomBase, table=True):
                         "type": "text",
                         "message_id": message.id
                     }
-                ).encode('utf-8')
+                ).encode('utf-8'),
+                callback=self.__class__.ack
             )
-            producer.flush()
+            producer.poll(1.0)
 
         return messages
 
-    def message_stream(self) -> Generator[Optional["Message"], None, None]:
+    def message_stream(self) -> Generator["Message", None, None]:
         """ Generates a stream of messages from a kafka topic representing the room
 
         Yields:
@@ -293,11 +322,7 @@ class Room(RoomBase, table=True):
                     print("no message")
                     continue
                 if msg.error():
-                    print("error: ", msg.error())
-                    # don't crash if the topic does not exist
-                    if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
-                        yield None
-                        break
+                    continue
                     raise KafkaException(msg.error())
 
                 print("got message: ", msg.value().decode('utf-8'))
@@ -306,6 +331,7 @@ class Room(RoomBase, table=True):
                 with Session(engine) as session:
                     print("fetching message from the database")
                     message = session.exec(select(Message).where(Message.id == msg["message_id"])).first()
+                    assert message is not None
                     yield message
 
         except KeyboardInterrupt:
@@ -315,10 +341,11 @@ class Room(RoomBase, table=True):
             consumer.close()
 
     def kafka_topic_name(self):
-        return f"{self._kafka_topic_prefix}-{self.id}"
+        return f"{self.__kafka_topic_prefix__}-{self.id}"
 
     def kafka_group_name(self):
-        return f"{self._kafka_group_prefix}-{self.id}"
+        print("kafka_group: ", f"{self.__kafka_group_prefix__}-{self.id}")
+        return f"{self.__kafka_group_prefix__}-{self.id}"
 
     def kafka_consumer(self):
         consumer = Consumer({
@@ -330,6 +357,7 @@ class Room(RoomBase, table=True):
         # check if the topic exists 
         # creates the topic if it doesn't exist
         topic = consumer.list_topics(topic=self.kafka_topic_name()).topics.get(self.kafka_topic_name())
+        print("topic_-_: ", topic)
 
         if topic is None:
             raise KafkaException(f"Topic {self.kafka_topic_name()} does not exist")
@@ -368,13 +396,12 @@ class Room(RoomBase, table=True):
             else:
                 raise
 
-    @property
-    def create_topic_status(self): 
-        return self._create_topic_status
-
-    @create_topic_status.setter
-    def create_topic_status(self, value: RoomTopicStatus):
-        self._create_topic_status = value
+    @staticmethod
+    def ack(err, msg):
+        if err is not None:
+            print("Failed to deliver message: {}".format(err.str()))
+        else:
+            print("Message produced: {}".format(msg.topic()))
 
 
 class RoomCreate(RoomBase):

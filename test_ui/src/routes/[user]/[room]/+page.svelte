@@ -1,9 +1,6 @@
 <script lang="ts">
 	import * as Avatar from "$lib/components/ui/avatar/index.js";
 	import * as Card from "$lib/components/ui/card/index.js"; 
-	import * as Command from "$lib/components/ui/command/index.js";
-	import * as Dialog from "$lib/components/ui/dialog/index.js";
-	import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 	import { Button } from "@/components/ui/button";
 	import { Input } from "@/components/ui/input";
 	import Send from "@lucide/svelte/icons/send";
@@ -18,78 +15,68 @@
 
 	let ws: WebSocket | undefined = undefined;
 
-	if (browser) {
-		ws = new WebSocket(
-			`ws://${BACKEND_HOST}/ws/rooms/${data.currentRoom.id}?token=${data.token}&username=${data.username}`
-		);
+	let useSse = true;
+	
+	if (useSse) {
+		if (browser) {
+			console.log("Using SSE");
+			let eventSource = new EventSource(
+				`http://localhost:9010/sse/${data.currentRoom.id}?token=${data.token}&username=${data.username}`,
+			)
 
-		ws.onopen = () => {
-			console.log("Connected to WebSocket server");
-		};
-
-		ws.onerror = (e) => {
-			console.log(e)
-		};
-
-		ws.onmessage = (event) => {
-			let data = JSON.parse(JSON.parse(event.data));
-			let msg = data?.message
-
-			if (!msg) {
-				console.error("Message is not recognized")
-			} else if (msg.type === "text") {
-				messages.push(msg.message)
-			} else if (msg.type === "connected") {
-				console.log("Websockket connection confirmed")
-			} else if (msg.type === "sent_confirmation") {
-				messages.push(msg.message)
-			} else {
-				console.error("Unknown message type:", msg)
+			eventSource.onmessage = (event) => {
+				console.log("New message!!!")
+				console.log(event.data)
 			}
-		};
+			console.log("is connected: ", eventSource.readyState === EventSource.OPEN);
+		}
 
-		ws.onerror = (error) => {
-			console.error("WebSocket error:", error);
-		};
+	} else {
+		if (browser) {
+			ws = new WebSocket(
+				`ws://localhost:9010/ws/rooms/${data.currentRoom.id}?token=${data.token}&username=${data.username}`
+			);
 
-		ws.onclose = () => {
-			console.log("WebSocket connection closed");
-		};
+			ws.onopen = () => {
+				console.log("Connected to WebSocket server");
+			};
 
+			ws.onerror = (e) => {
+				console.log(e)
+			};
+
+			ws.onmessage = (event) => {
+				let data = JSON.parse(JSON.parse(event.data));
+				let msg = data?.message
+
+				if (!msg) {
+					console.error("Message is not recognized")
+				} else if (msg.type === "text") {
+					messages.push(msg.message)
+				} else if (msg.type === "connected") {
+					console.log("Websockket connection confirmed")
+				} else if (msg.type === "sent_confirmation") {
+					messages.push(msg.message)
+				} else {
+					console.error("Unknown message type:", msg)
+				}
+			};
+
+			ws.onerror = (error) => {
+				console.error("WebSocket error:", error);
+			};
+
+			ws.onclose = () => {
+				console.log("WebSocket connection closed");
+			};
+
+		}
 	}
+
 
 	function cn(...inputs: ClassValue[]) {
 		return twMerge(clsx(inputs));
 	}
-
-
-	const users = [
-		{
-			name: "Olivia Martin",
-			email: "m@example.com",
-		},
-		{
-			name: "Isabella Nguyen",
-			email: "isabella.nguyen@email.com",
-		},
-		{
-			name: "Emma Wilson",
-			email: "emma@example.com",
-		},
-		{
-			name: "Jackson Lee",
-			email: "lee@example.com",
-		},
-		{
-			name: "William Kim",
-			email: "will@email.com",
-		},
-	] as const;
-
-	type User = (typeof users)[number];
-
-	let open = $state(false);
-	let selectedUsers: User[] = $state([]);
 
 	let messages = $state(data.currentRoomMessages);
 
@@ -99,7 +86,6 @@
 <a href="/{data.username}" class="absolute top-10 left-10">
 	<CircleArrowLeft />
 </a>
-
 
 <div class="w-full flex items-center justify-center">
 	<div class="w-full px-[250px] h-screen overflow-hidden -mt-[80px] pt-[80px]">

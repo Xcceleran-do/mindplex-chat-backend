@@ -99,7 +99,6 @@ connections = ConnectionManager()
 async def websocket_endpoint(
     websocket: WebSocket,
     room_id: str,
-    # session: Session = Depends(get_session),
     user_or_err: User | str = Depends(get_user_from_qp_dep),
 ):
     if type(user_or_err) is str:
@@ -135,7 +134,7 @@ async def websocket_endpoint(
             return
 
         # check if user is in room
-        if not await room_for_validation.is_user_in_room(user) and room_for_validation.room_type == RoomType.PRIVATE:
+        if not await room_for_validation.is_user_in_room(session, user) and room_for_validation.room_type == RoomType.PRIVATE:
             await websocket.accept()
             response = WSResponse(
                 success=False,
