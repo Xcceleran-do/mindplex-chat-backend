@@ -10,6 +10,7 @@ export const actions = {
 		const roomType = data.get('roomType') as string;
 		const remoteUser = data.get('remoteUser') as string;
 
+		console.log("createRoom: ", token, username, roomType, remoteUser);
 		// missing status code
 		if (token === null || username === null || roomType === null)
 			return fail(400, { missing: true });
@@ -17,7 +18,6 @@ export const actions = {
 		if (roomType === "private" && remoteUser === null)
 			return fail(400, { missing: true });
 
-		console.log("createRoom: ", token, username, roomType, remoteUser);
 		let res = await createRoom(token, username, {
 			room_type: roomType,
 			participants: roomType === "private" ? [remoteUser] : []
@@ -25,5 +25,9 @@ export const actions = {
 
 		if (res === undefined)
 			return fail(500, { error: true });
+
+		return {
+			success: true
+		}
 	}
 } satisfies Actions

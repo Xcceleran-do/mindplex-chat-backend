@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 import os
 import json
-from typing import Any, Generator, Optional
+from typing import Any, AsyncGenerator, Optional
 from sqlmodel import (
     Relationship,
     Field,
@@ -10,6 +10,7 @@ from sqlmodel import (
     Session,
     UniqueConstraint,
     create_engine,
+    insert,
     select,
 )
 from .api import Mindplex, MindplexApiException
@@ -17,8 +18,9 @@ import psycopg2
 from psycopg2 import OperationalError
 import secrets
 import time
-from confluent_kafka import Producer, Consumer, KafkaException, KafkaError 
-from confluent_kafka.admin import AdminClient, NewTopic
+from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+import asyncio
+import logging
 
 
 POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
@@ -35,8 +37,16 @@ engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTG
 
 # Helpers
 
-def wait_for_postgres(host, port, db, user, password, timeout=30):
+def wait_for_postgres(
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        db=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        timeout=30
+):
     start = time.time()
+    print("Connecting to PostgreSQL...")
     while True:
         try:
             conn = psycopg2.connect(
@@ -47,12 +57,14 @@ def wait_for_postgres(host, port, db, user, password, timeout=30):
                 port=port,
             )
             conn.close()
+            print("Connected to PostgreSQL")
             break
         except OperationalError as e:
             if time.time() - start > timeout:
                 raise e
             print("Waiting for PostgreSQL...")
             time.sleep(1)
+
 
 
 def generate_id():
@@ -135,6 +147,19 @@ class User(SQLModel, table=True):
 class RoomBase(SQLModel):
     room_type: RoomType = Field(default=RoomType.UNIVERSAL)
 
+# with session decorator
+def with_session(func, *args, **kwargs):
+    async def wrapper(*args, **kwargs):
+        session = kwargs.pop("session", None)
+
+        if session is None:
+            with Session(engine) as session:
+                return await func(*args, session=session, **kwargs)
+        else:
+            return await func(*args, session=session, **kwargs)
+
+    return wrapper
+
 
 class Room(RoomBase, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
@@ -148,26 +173,29 @@ class Room(RoomBase, table=True):
     created: datetime = Field(default_factory=datetime.now)
     last_interacted: datetime = Field(default_factory=datetime.now)
 
-    _kafka_topic_prefix = "room"
-    _kafka_group_prefix = "group"
-    _create_topic_status: RoomTopicStatus  = RoomTopicStatus.NOT_CREATED
+    __kafka_topic_prefix__: str = "room"
+    __kafka_group_prefix__: str = "group"
 
-    async def add_participant(self, participant: "User"):
+    # @with_session
+    async def add_participant(self, session: Session, participant: "User"):
         """add a participant to the room and commit to db.
 
         Raises:
             RoomValidationException: if the participant is already in the room
             RoomValidationException: if the room is private and the room has > 2 participants
         """
-        if self.room_type == RoomType.PRIVATE and await self.is_user_in_room(participant):
+
+        if self.room_type == RoomType.PRIVATE and await self.is_user_in_room(session, participant):
             raise RoomValidationException("Participant is already in the room")
 
         if self.room_type == RoomType.PRIVATE and len(self.participants) == 1:
             raise RoomValidationException("Room is private")
 
-        self.participants.append(participant)
+        room_participant = RoomParticipantLink(user_id=participant.id, room_id=self.id)
+        session.add(room_participant)
+        session.commit()
 
-    async def add_message(self, message: "Message"):
+    async def add_message(self, session: Session, message: "Message"):
         """**Deprecated** add a message to the room.
 
         Args:
@@ -181,7 +209,7 @@ class Room(RoomBase, table=True):
             Message: the message that is added
         """
         if (
-            not await self.is_user_in_room(message.owner)
+            not await self.is_user_in_room(session, message.owner)
             and not (self.room_type == RoomType.UNIVERSAL)
         ):
             raise RoomValidationException("User is not in the room")
@@ -193,7 +221,7 @@ class Room(RoomBase, table=True):
     async def is_message_in_room(self, message: "Message"):
         return message in self.messages
 
-    async def is_user_in_room(self, user: "User"):
+    async def is_user_in_room(self, session: Session, user: "User"):
         """checks if a user is in the room as a participant or owner
 
         Args:
@@ -202,15 +230,25 @@ class Room(RoomBase, table=True):
         Returns:
             bool: True if the user is in the room
         """
+        participant_stmt = (
+            select(User)
+            .join(RoomParticipantLink)
+            .where(Room.id == self.id)
+        )
+        participants = session.exec(participant_stmt).all()
+
         return (
-                user in self.participants 
-                or user.id == self.owner_id 
-                or self.room_type == RoomType.UNIVERSAL
+            user.id in [participant.id for participant in participants]
+            or user.id == self.owner_id 
+            or self.room_type == RoomType.UNIVERSAL
         )
 
     @classmethod
     async def get_by_id(
-        cls, room_id: str, session: Session, raise_exc: bool = True
+        cls,
+        room_id: str,
+        session: Session,
+        raise_exc: bool=True
     ) -> Optional["Room"]:
         """Gets a room by id
 
@@ -241,6 +279,7 @@ class Room(RoomBase, table=True):
             message (Message): the message to send
 
         Raises:
+            MessageNotFoundException: if the message id is not set(did not persist)
             RoomValidationException: if the message is not in the room
             RoomNotFoundException: if the room is not found in the database
 
@@ -248,133 +287,93 @@ class Room(RoomBase, table=True):
             Message: the message that is sent
         """
 
-        producer = self.kafka_producer()
+        producer = await self.kafka_producer()
 
-        for message in messages:
-            if message.id == None:
-                raise MessageNotFoundException("message id is not set")
+        try:
+            for message in messages:
+                if message.id == None:
+                    raise MessageNotFoundException("message id is not set")
 
-            if not await self.is_message_in_room(message):
-                raise RoomValidationException("Message is not in the room")
+                if not await self.is_message_in_room(message):
+                    raise RoomValidationException("Message is not in the room")
 
-            if self.id == None:
-                raise RoomNotFoundException("room id is not set")
+                if self.id == None:
+                    raise RoomNotFoundException("room id is not set")
 
-            producer.produce(
-                self.kafka_topic_name(),
-                json.dumps(
-                    {
-                        "type": "text",
-                        "message_id": message.id
-                    }
-                ).encode('utf-8')
-            )
-            producer.flush()
+                # Produce message
+                await producer.send_and_wait(
+                    self.kafka_topic_name(),
+                    json.dumps(
+                        {
+                            "type": "text",
+                            "message_id": message.id
+                        }
+                    ).encode('utf-8')
+                )
+        finally:
+            # Wait for all pending messages to be delivered or expire.
+            await producer.stop()
 
         return messages
 
-    def message_stream(self) -> Generator[Optional["Message"], None, None]:
+    async def message_stream(self) -> AsyncGenerator["Message"]:
         """ Generates a stream of messages from a kafka topic representing the room
 
         Yields:
             Message: the message
         """
-        print("before kafka subscribe")
-        consumer = self.kafka_consumer()
-        print("after kafka subscribe")
+        consumer = await self.kafka_consumer()
 
         try:
-            print("entering polling loop")
-            while True:
-                print("polling kafka")
-                msg = consumer.poll(1.0)
-
-                if msg is None:
-                    print("no message")
-                    continue
-                if msg.error():
-                    print("error: ", msg.error())
-                    # don't crash if the topic does not exist
-                    if msg.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
-                        yield None
-                        break
-                    raise KafkaException(msg.error())
-
-                print("got message: ", msg.value().decode('utf-8'))
-                msg = json.loads(msg.value().decode('utf-8'))
+            # Consume messages
+            async for msg in consumer:
+                msg = json.loads(msg.value.decode('utf-8'))
 
                 with Session(engine) as session:
-                    print("fetching message from the database")
                     message = session.exec(select(Message).where(Message.id == msg["message_id"])).first()
-                    yield message
+                    assert message is not None
 
-        except KeyboardInterrupt:
-            print("exiting message stream")
-            consumer.close()
+                yield message
         finally:
-            consumer.close()
+            # Will leave consumer group; perform autocommit if enabled.
+            await consumer.stop()
 
     def kafka_topic_name(self):
-        return f"{self._kafka_topic_prefix}-{self.id}"
+        return f"{self.__kafka_topic_prefix__}-{self.id}"
 
     def kafka_group_name(self):
-        return f"{self._kafka_group_prefix}-{self.id}"
+        return f"{self.__kafka_group_prefix__}-{self.id}"
 
-    def kafka_consumer(self):
-        consumer = Consumer({
-            'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
-            'group.id': self.kafka_group_name(),
-            'auto.offset.reset': 'earliest'
-        })
+    async def kafka_consumer(self):
+        consumer = AIOKafkaConsumer(
+            self.kafka_topic_name(),
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            group_id=self.kafka_group_name(),
+            auto_offset_reset="earliest",
+            enable_auto_commit=True,
+        )
 
-        # check if the topic exists 
-        # creates the topic if it doesn't exist
-        topic = consumer.list_topics(topic=self.kafka_topic_name()).topics.get(self.kafka_topic_name())
+        # Get cluster layout and join group `my-group`
+        await consumer.start()
 
-        if topic is None:
-            raise KafkaException(f"Topic {self.kafka_topic_name()} does not exist")
+        timeout = time.time() + 10
 
-        consumer.subscribe([self.kafka_topic_name()])
+        while self.kafka_topic_name() not in await consumer.topics():
+            await asyncio.sleep(0.1)
+            if time.time() > timeout:
+                raise Exception("Topic not found")
+
 
         return consumer
 
-    def kafka_producer(self):
-        return Producer({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
+    async def kafka_producer(self):
+        producer = AIOKafkaProducer(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        )
 
-    def create_kafka_topic(self) -> Optional[Any]:
-        """ Creates a kafka topic for the room. does nothing if the topic already exists
+        await producer.start()
 
-        Raises:
-        """
-
-        admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
-        partitions = 2 if self.room_type == RoomType.PRIVATE else 6
-
-        try:
-            topic_future = admin_client.create_topics(
-                [
-                    NewTopic(
-                        topic=self.kafka_topic_name(),
-                        num_partitions=partitions,
-                        replication_factor=1,
-                    )
-                ]
-            )
-            topic_future[self.kafka_topic_name()].result(10)
-
-        except KafkaException as ke:
-            if ke.args[0].error == KafkaError.TOPIC_ALREADY_EXISTS:
-                return None 
-            else:
-                raise
-
-    @property
-    def create_topic_status(self): 
-        return self._create_topic_status
-
-    @create_topic_status.setter
-    def create_topic_status(self, value: RoomTopicStatus):
-        self._create_topic_status = value
+        return producer
 
 
 class RoomCreate(RoomBase):

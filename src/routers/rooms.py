@@ -7,7 +7,7 @@ from sqlmodel import Session, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from ..dependencies import get_session, get_user_dep, DEFAULT_UNIVERSAL_GROUP_EXPIRY
-from ..models import Room, RoomCreate, RoomNotFoundException, RoomParticipantLink, RoomType, User, UserNotFoundException, Message, MessageCreate
+from ..models import Room, RoomCreate, RoomNotFoundException, RoomParticipantLink, RoomType, RoomValidationException, User, UserNotFoundException, Message, MessageCreate
 from ..filters import MessageFilter, RoomFilter
 from sqlalchemy.dialects import postgresql  # or the appropriate dialect you're using
 
@@ -134,7 +134,7 @@ async def get_room(
     except AssertionError:  # Just in case
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_user_in_room(user):
+    if not await room.is_user_in_room(session, user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )
@@ -171,7 +171,7 @@ async def get_room_participants(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_user_in_room(user):
+    if not await room.is_user_in_room(session, user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )
@@ -207,7 +207,7 @@ async def get_room_messages(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
-    if not await room.is_user_in_room(user):
+    if not await room.is_user_in_room(session, user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
     )
@@ -242,10 +242,14 @@ async def send_message(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
-    room = await Room.get_by_id(room_id, session, raise_exc=True)
+    try:
+        room = await Room.get_by_id(room_id, session, raise_exc=True)
+    except RoomNotFoundException:
+        raise HTTPException(status_code=404, detail="Room does not exist")
+
     assert room
 
-    if not await room.is_user_in_room(user):
+    if not await room.is_user_in_room(session, user):
         raise HTTPException(
             status_code=403, detail="User does not have access to this room"
         )
@@ -263,6 +267,7 @@ async def send_message(
 
 
     # send message to kafka
+    _ = await room.send_message([db_message])
 
     return db_message
 

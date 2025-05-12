@@ -33,7 +33,6 @@ async function auth_user(username: string) {
 		const data = await response.json()
 		token = data.token
 	}
-	console.log("token: ", token)
 
 	return token
 }
@@ -50,9 +49,14 @@ export const load: LayoutServerLoad = async ({ url, params }) => {
 	if (token === null ) 
 		throw redirect(302, '/');
 
+
+	console.log("token: ", token)
 	let chatUser = await getMe(token, username)
+	console.log("chatUser: ", chatUser)
 	let privateRooms = await getRooms(token, username, "room_type=private")
+	console.log("privateRooms: ", privateRooms)
 	let universalRooms = await getRooms(token, username, "room_type=universal")
+	console.log("universalRooms: ", universalRooms)
 
 	if (chatUser === undefined)
 		throw redirect(302, '/');

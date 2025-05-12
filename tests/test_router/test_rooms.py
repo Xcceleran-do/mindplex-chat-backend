@@ -1,3 +1,4 @@
+import json
 from typing import Any
 from fastapi.testclient import TestClient
 from pytest import Session
@@ -92,7 +93,6 @@ class TestGetRooms:
 
     def test_no_auth(self, client: TestClient):
         response = client.get("/rooms/", headers={"Authorization": "", "X-Username": "dave"})
-        print("response status: ", response.status_code)
         assert response.status_code == 401
 
     def test_rooms_filter_room_type(self, token: str, client: TestClient, public_rooms, private_rooms):
@@ -104,18 +104,6 @@ class TestGetRooms:
 
         assert response.status_code == 200
         data = response.json() 
-
-        print("data")
-        for d in data:
-            print(d["id"])
-
-        print("private_rooms")
-        for d in private_rooms:
-            print(d.id)
-
-        print("public_rooms")
-        for d in public_rooms:
-            print(d.id)
 
         assert len(data) == len(private_rooms)
 
@@ -150,7 +138,6 @@ class TestGetRooms:
             headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
             params={"owner__id": users[0].id}
         )
-        # print("users: ", users[0].id)
 
         assert response.status_code == 200
         data = response.json()
@@ -227,9 +214,6 @@ class TestGetRooms:
         )
         assert response.status_code == 200
         data = response.json()
-
-        print("data: ", [room["id"] for room in data])
-        print("dave_unlinked_rooms: ", [room.id for room in dave_unlinked_rooms])
 
         assert len(data) == len(dave_1_private_room)
         for room in data:
@@ -330,8 +314,6 @@ class TestGetRoom:
         )
         data = response.json()
 
-        print(f"to_be_requested_user: {rooms_with_mindplex[0].owner}")
-
         assert response.status_code == 200
         assert data["id"] == rooms_with_mindplex[0].id
         # assert data["owner_id"] == str(mindplex_users["dave"].username)
@@ -403,7 +385,6 @@ class TestGetRoomMessages:
         response = client.get(
             f"/rooms/{rooms[0].id}/messages", headers={"Authorization": "", "X-Username": "test_user"}
         )
-        print("details: ", response.json())
         assert response.status_code == 401
 
     def test_non_existing_room(self, token: dict[str, Any], client: TestClient):
@@ -664,14 +645,6 @@ class TestGetRoomParticipants:
 
         assert response2.status_code == 200
         data2 = response2.json()
-        print("data2")
-        for d in data2:
-            print(d["id"])
-
-        print("room_with_messages")
-        for d in room_with_messages[1].messages:
-            print(d.owner.id)
-
 
         assert len(data2) == 1
 
@@ -681,7 +654,8 @@ class TestGetRoomParticipants:
 
 
 class TestSendMessage:
-    def test_send_message(self, token, client: TestClient, session: Session, rooms):
+    @pytest.mark.asyncio
+    async def test_send_message(self, token, client: TestClient, session: Session, rooms: list[Room]):
         response = client.post(
             f"/rooms/{rooms[0].id}/messages",
             headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
@@ -691,12 +665,23 @@ class TestSendMessage:
         assert response.status_code == 200
         data = response.json()
         assert data["text"] == "hello world"
+
+        # test message perssists
         db_message = session.exec(
             select(Message).where(Message.id == data["id"])
         ).first() 
         assert db_message
         assert db_message.room_id == rooms[0].id
         assert db_message.text == "hello world"
+
+        # test message sent to kafka
+        consumer = await rooms[0].kafka_consumer()
+        try:
+            kafka_msg = await consumer.getone()
+            assert kafka_msg is not None
+            assert json.loads(kafka_msg.value.decode('utf-8'))["message_id"] == data["id"]
+        finally:
+            await consumer.stop()
 
     def test_user_not_in_room(self, token, client: TestClient, rooms):
         response = client.post(

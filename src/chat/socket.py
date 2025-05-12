@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from pydantic import BaseModel, ValidationError, model_validator
 from fastapi import WebSocket
 from sqlmodel import select
-from .dependencies import get_session, get_user_from_qp_dep
-from .models import Message, Room, RoomType, Session, User, engine
+from ..dependencies import get_session, get_user_from_qp_dep
+from ..models import Message, Room, RoomType, Session, User, engine
 import dotenv
 
 dotenv.load_dotenv()
@@ -71,7 +71,7 @@ class WSMessageType(str, Enum):
 class WSMessage(BaseModel):
     type: WSMessageType
     message: Optional[Message | str] 
-    sender: Optional[User]
+    sender: Optional[User]  # TODO: deprecate
 
     class Config:
         arbitrary_types_allowed = True
@@ -99,7 +99,6 @@ connections = ConnectionManager()
 async def websocket_endpoint(
     websocket: WebSocket,
     room_id: str,
-    # session: Session = Depends(get_session),
     user_or_err: User | str = Depends(get_user_from_qp_dep),
 ):
     if type(user_or_err) is str:
@@ -135,7 +134,7 @@ async def websocket_endpoint(
             return
 
         # check if user is in room
-        if not await room_for_validation.is_user_in_room(user) and room_for_validation.room_type == RoomType.PRIVATE:
+        if not await room_for_validation.is_user_in_room(session, user) and room_for_validation.room_type == RoomType.PRIVATE:
             await websocket.accept()
             response = WSResponse(
                 success=False,
@@ -175,9 +174,8 @@ async def websocket_endpoint(
                 user = await User.from_remote_or_db(user_id, session)  # user must exist in local db
                 assert room
 
-                message = Message(owner=user, text=data.message)
+                message = Message(owner=user, text=data.message, room=room)
 
-                await room.add_message(message)
                 session.add(message)
                 session.commit()
                 session.refresh(message)
@@ -196,7 +194,6 @@ async def websocket_endpoint(
             )
 
     except WebSocketDisconnect:
-        print("A user has disconnected: ", websocket)
         await connections.disconnect(websocket, room_id)
         # return session
         session.close()
