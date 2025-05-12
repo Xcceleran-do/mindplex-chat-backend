@@ -1,15 +1,11 @@
 from datetime import datetime, timedelta
-import uuid
 import pytest
 from src.api import Mindplex, MindplexUser
-from src.models import RoomType, SQLModel, Room, User, Message, engine, Session, KAFKA_BOOTSTRAP_SERVERS 
+from src.models import RoomType, SQLModel, Room, User, Message, engine, Session 
 from src.main import app, DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import sessionmaker
 import httpx
 import pytest_asyncio
-import os
-from confluent_kafka import Producer, Consumer, KafkaException, KafkaError
 
 @pytest.fixture(autouse=True)
 def set_env_vars(monkeypatch):

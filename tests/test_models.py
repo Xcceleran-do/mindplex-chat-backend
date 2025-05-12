@@ -1,10 +1,9 @@
-from src.models import RoomTopicStatus, RoomType, RoomParticipantLink, Room, User, Message, RoomValidationException
+from src.models import  RoomType, Room, User, Message, RoomValidationException
 import pytest
 import json
 from sqlmodel import Session, select, delete, or_
 from .fixtures import *
-from confluent_kafka.admin import AdminClient
-import threading
+import asyncio
 
 
 class TestUser:
@@ -167,37 +166,30 @@ class TestRoom:
     ):
         assert users[0].id
         assert rooms[0].id
-        consumer1 = rooms[0].kafka_consumer()
+        consumer1 = await rooms[0].kafka_consumer()
 
-        messages = [
-            Message(text="test msg 1", owner_id=users[0].id, room_id=rooms[0].id),
-            Message(text="test msg 2", owner_id=users[0].id, room_id=rooms[0].id),
-            Message(text="test msg 3", owner_id=users[0].id, room_id=rooms[0].id),
-        ]
-        rooms[0].messages.extend(messages)
-        session.commit()
-        session.refresh(rooms[0])
+        try:
+            messages = [
+                Message(text="test msg 1", owner_id=users[0].id, room_id=rooms[0].id),
+                Message(text="test msg 2", owner_id=users[0].id, room_id=rooms[0].id),
+                Message(text="test msg 3", owner_id=users[0].id, room_id=rooms[0].id),
+            ]
+            rooms[0].messages.extend(messages)
+            session.commit()
+            session.refresh(rooms[0])
 
-        sent_msg = await rooms[0].send_message(messages)
-        assert sent_msg
+            sent_msg = await rooms[0].send_message(messages)
+            assert sent_msg
 
-        # consume message as all other users
-        msg1 = consumer1.poll(10)
-
-        if msg1 is None:
-            print("no message")
-            raise KafkaException("no message")
-        elif msg1.error():
-            print("error: ", msg1.error())
-            raise KafkaException(msg1.error())
-        else:
-            msg1 = json.loads(msg1.value().decode('utf-8'))
+            # consume message as all other users
+            msg1 = await consumer1.getone()
+            msg1 = json.loads(msg1.value.decode('utf-8'))
             assert msg1["type"] == "text"
             assert msg1["message_id"] == sent_msg[0].id
             assert msg1["message_id"] != sent_msg[1].id
             assert msg1["message_id"] != sent_msg[2].id
-
-        consumer1.close()
+        finally:
+            await consumer1.stop()
 
     @pytest.mark.asyncio
     async def test_message_stream(
@@ -217,30 +209,40 @@ class TestRoom:
         session.commit()
         session.refresh(rooms[0])
 
-        producer = rooms[0].kafka_producer()
+        producer = await rooms[0].kafka_producer()
+        await producer.start()
 
-        for message in messages:
-            producer.produce(
-                topic=rooms[0].kafka_topic_name(),
-                value=json.dumps({
-                    "type": "text",
-                    "message_id": message.id
-                })
-            )
+        try:
+            for message in messages:
+                await producer.send_and_wait(
+                    rooms[0].kafka_topic_name(),
+                    json.dumps(
+                        {
+                            "type": "text",
+                            "message_id": message.id
+                        }
+                    ).encode('utf-8')
+                )
+        finally:
+            await producer.stop()
 
         new_messages = rooms[0].message_stream()
 
-        msg1 = next(new_messages)
-        assert msg1
-        assert msg1.id == messages[0].id 
+        try:
+            msg1 = await asyncio.wait_for(anext(new_messages), 5)
+            assert msg1
+            assert msg1.id == messages[0].id 
 
-        msg2 = next(new_messages)
-        assert msg2
-        assert msg2.id == messages[1].id
+            msg2 = await asyncio.wait_for(anext(new_messages), 5)
+            assert msg2
+            assert msg2.id == messages[1].id
 
-        msg3 = next(new_messages)
-        assert msg3
-        assert msg3.id == messages[2].id
+            msg3 = await asyncio.wait_for(anext(new_messages), 5)
+            assert msg3
+            assert msg3.id == messages[2].id
+
+        finally:
+            await new_messages.aclose()
 
     # @pytest.mark.asyncio
     # async def test_message_stream_with_multiple_consumers(

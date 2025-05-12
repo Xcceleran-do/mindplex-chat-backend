@@ -682,7 +682,8 @@ class TestGetRoomParticipants:
 
 
 class TestSendMessage:
-    def test_send_message(self, token, client: TestClient, session: Session, rooms: list[Room]):
+    @pytest.mark.asyncio
+    async def test_send_message(self, token, client: TestClient, session: Session, rooms: list[Room]):
         response = client.post(
             f"/rooms/{rooms[0].id}/messages",
             headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
@@ -702,10 +703,13 @@ class TestSendMessage:
         assert db_message.text == "hello world"
 
         # test message sent to kafka
-        consumer = rooms[0].kafka_consumer()
-        kafka_msg = consumer.poll(10)
-        assert kafka_msg is not None
-        assert json.loads(kafka_msg.value().decode('utf-8'))["message_id"] == data["id"]
+        consumer = await rooms[0].kafka_consumer()
+        try:
+            kafka_msg = await consumer.getone()
+            assert kafka_msg is not None
+            assert json.loads(kafka_msg.value.decode('utf-8'))["message_id"] == data["id"]
+        finally:
+            await consumer.stop()
 
     def test_user_not_in_room(self, token, client: TestClient, rooms):
         response = client.post(

@@ -4,9 +4,6 @@ import os
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-
-from confluent_kafka import Producer, Consumer, KafkaException, KafkaError
-
 from .dependencies import DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from .chat import socket, sse
 from .models import SQLModel, engine, wait_for_postgres

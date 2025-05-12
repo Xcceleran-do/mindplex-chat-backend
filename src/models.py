@@ -2,8 +2,7 @@ from datetime import datetime
 from enum import Enum
 import os
 import json
-from typing import Any, AsyncGenerator, Generator, Optional
-from pydantic import PrivateAttr
+from typing import Any, AsyncGenerator, Optional
 from sqlmodel import (
     Relationship,
     Field,
@@ -19,8 +18,7 @@ import psycopg2
 from psycopg2 import OperationalError
 import secrets
 import time
-from confluent_kafka import Producer, Consumer, KafkaException, KafkaError 
-from confluent_kafka.admin import AdminClient, NewTopic
+from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 
 
 POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
@@ -287,127 +285,85 @@ class Room(RoomBase, table=True):
             Message: the message that is sent
         """
 
-        producer = self.kafka_producer()
+        producer = await self.kafka_producer()
 
-        for message in messages:
-            if message.id == None:
-                raise MessageNotFoundException("message id is not set")
+        try:
+            for message in messages:
+                if message.id == None:
+                    raise MessageNotFoundException("message id is not set")
 
-            if not await self.is_message_in_room(message):
-                raise RoomValidationException("Message is not in the room")
+                if not await self.is_message_in_room(message):
+                    raise RoomValidationException("Message is not in the room")
 
-            if self.id == None:
-                raise RoomNotFoundException("room id is not set")
+                if self.id == None:
+                    raise RoomNotFoundException("room id is not set")
 
-            producer.produce(
-                self.kafka_topic_name(),
-                json.dumps(
-                    {
-                        "type": "text",
-                        "message_id": message.id
-                    }
-                ).encode('utf-8'),
-                callback=self.__class__.ack
-            )
-            producer.poll(1.0)
-        producer.flush()
+                # Produce message
+                await producer.send_and_wait(
+                    self.kafka_topic_name(),
+                    json.dumps(
+                        {
+                            "type": "text",
+                            "message_id": message.id
+                        }
+                    ).encode('utf-8')
+                )
+        finally:
+            # Wait for all pending messages to be delivered or expire.
+            await producer.stop()
 
         return messages
 
-    async def message_stream(self) -> AsyncGenerator["Message", None]:
+    async def message_stream(self) -> AsyncGenerator["Message"]:
         """ Generates a stream of messages from a kafka topic representing the room
 
         Yields:
             Message: the message
         """
-        print("before kafka subscribe")
-        consumer = self.kafka_consumer()
-        print("after kafka subscribe")
+        consumer = await self.kafka_consumer()
 
         try:
-            print("entering polling loop")
-            while True:
-                msg = consumer.poll(1.0)
-
-                if msg is None:
-                    continue
-                if msg.error():
-                    raise KafkaException(msg.error())
-
-                print("got message: ", msg.value().decode('utf-8'))
-                msg = json.loads(msg.value().decode('utf-8'))
+            # Consume messages
+            async for msg in consumer:
+                msg = json.loads(msg.value.decode('utf-8'))
 
                 with Session(engine) as session:
-                    print("fetching message from the database")
                     message = session.exec(select(Message).where(Message.id == msg["message_id"])).first()
                     assert message is not None
-                    yield message
 
-        except KeyboardInterrupt:
-            print("exiting message stream")
-            consumer.close()
+                yield message
         finally:
-            consumer.close()
+            # Will leave consumer group; perform autocommit if enabled.
+            await consumer.stop()
 
     def kafka_topic_name(self):
         return f"{self.__kafka_topic_prefix__}-{self.id}"
 
     def kafka_group_name(self):
-        print("kafka_group: ", f"{self.__kafka_group_prefix__}-{self.id}")
         return f"{self.__kafka_group_prefix__}-{self.id}"
 
-    def kafka_consumer(self):
-        # Create admin client to manage topics
-        admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
 
-        # Check if topic exists and create if needed
-        topic_name = self.kafka_topic_name()
-        topic_metadata = admin_client.list_topics(topic=topic_name, timeout=10)
+    async def kafka_consumer(self):
+        consumer = AIOKafkaConsumer(
+            self.kafka_topic_name(),
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            group_id=self.kafka_group_name(),
+            auto_offset_reset="earliest",
+            enable_auto_commit=True,
+        )
 
-        if topic_metadata.topics.get(topic_name) is None:
-            # Create topic if it doesn't exist
-            new_topic = NewTopic(
-                topic_name,
-                num_partitions=1,
-                replication_factor=1  # Adjust based on your cluster
-            )
-            admin_client.create_topics([new_topic])
-
-            # Wait for topic creation to propagate
-            import time
-            time.sleep(2)  # Brief delay for topic creation
-
-        # Now create consumer
-        consumer = Consumer({
-            'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
-            'group.id': self.kafka_group_name(),
-            'auto.offset.reset': 'earliest'
-        })
-
-        consumer.subscribe([topic_name])
+        # Get cluster layout and join group `my-group`
+        await consumer.start()
         return consumer
 
-    # def kafka_consumer(self):
-    #     consumer = Consumer({
-    #         'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
-    #         'group.id': self.kafka_group_name(),
-    #         'auto.offset.reset': 'earliest'
-    #     })
-    #
-    #     # check if the topic exists 
-    #     # creates the topic if it doesn't exist
-    #     topic = consumer.list_topics(topic=self.kafka_topic_name()).topics.get(self.kafka_topic_name())
-    #     print("topic_-_: ", topic)
-    #
-    #     if topic is None:
-    #         raise KafkaException(f"Topic {self.kafka_topic_name()} does not exist")
-    #
-    #     consumer.subscribe([self.kafka_topic_name()])
-    #
-    #     return consumer
+    async def kafka_producer(self):
+        producer = AIOKafkaProducer(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        )
 
-    def kafka_producer(self):
-        return Producer({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
+        await producer.start()
+
+        return producer
 
     def create_kafka_topic(self) -> Optional[Any]:
         """ Creates a kafka topic for the room. does nothing if the topic already exists
