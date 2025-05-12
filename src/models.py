@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 import os
 import json
-from typing import Any, Generator, Optional
+from typing import Any, AsyncGenerator, Generator, Optional
 from pydantic import PrivateAttr
 from sqlmodel import (
     Relationship,
@@ -46,6 +46,7 @@ def wait_for_postgres(
         timeout=30
 ):
     start = time.time()
+    print("Connecting to PostgreSQL...")
     while True:
         try:
             conn = psycopg2.connect(
@@ -313,7 +314,7 @@ class Room(RoomBase, table=True):
 
         return messages
 
-    def message_stream(self) -> Generator["Message", None, None]:
+    async def message_stream(self) -> AsyncGenerator["Message", None]:
         """ Generates a stream of messages from a kafka topic representing the room
 
         Yields:
@@ -326,14 +327,11 @@ class Room(RoomBase, table=True):
         try:
             print("entering polling loop")
             while True:
-                print("polling kafka")
                 msg = consumer.poll(1.0)
 
                 if msg is None:
-                    print("no message")
                     continue
                 if msg.error():
-                    continue
                     raise KafkaException(msg.error())
 
                 print("got message: ", msg.value().decode('utf-8'))
@@ -359,23 +357,54 @@ class Room(RoomBase, table=True):
         return f"{self.__kafka_group_prefix__}-{self.id}"
 
     def kafka_consumer(self):
+        # Create admin client to manage topics
+        admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
+
+        # Check if topic exists and create if needed
+        topic_name = self.kafka_topic_name()
+        topic_metadata = admin_client.list_topics(topic=topic_name, timeout=10)
+
+        if topic_metadata.topics.get(topic_name) is None:
+            # Create topic if it doesn't exist
+            new_topic = NewTopic(
+                topic_name,
+                num_partitions=1,
+                replication_factor=1  # Adjust based on your cluster
+            )
+            admin_client.create_topics([new_topic])
+
+            # Wait for topic creation to propagate
+            import time
+            time.sleep(2)  # Brief delay for topic creation
+
+        # Now create consumer
         consumer = Consumer({
             'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
             'group.id': self.kafka_group_name(),
             'auto.offset.reset': 'earliest'
         })
 
-        # check if the topic exists 
-        # creates the topic if it doesn't exist
-        topic = consumer.list_topics(topic=self.kafka_topic_name()).topics.get(self.kafka_topic_name())
-        print("topic_-_: ", topic)
-
-        if topic is None:
-            raise KafkaException(f"Topic {self.kafka_topic_name()} does not exist")
-
-        consumer.subscribe([self.kafka_topic_name()])
-
+        consumer.subscribe([topic_name])
         return consumer
+
+    # def kafka_consumer(self):
+    #     consumer = Consumer({
+    #         'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS,
+    #         'group.id': self.kafka_group_name(),
+    #         'auto.offset.reset': 'earliest'
+    #     })
+    #
+    #     # check if the topic exists 
+    #     # creates the topic if it doesn't exist
+    #     topic = consumer.list_topics(topic=self.kafka_topic_name()).topics.get(self.kafka_topic_name())
+    #     print("topic_-_: ", topic)
+    #
+    #     if topic is None:
+    #         raise KafkaException(f"Topic {self.kafka_topic_name()} does not exist")
+    #
+    #     consumer.subscribe([self.kafka_topic_name()])
+    #
+    #     return consumer
 
     def kafka_producer(self):
         return Producer({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})

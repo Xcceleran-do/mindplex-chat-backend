@@ -26,7 +26,7 @@ class SSEMessage(BaseModel):
 
 
 async def message_event_generator(room: Room):
-    for msg in room.message_stream():
+    async for msg in room.message_stream():
         yield f"data: This is a Message -> {msg.text}\n\n"
 
 
@@ -35,6 +35,8 @@ async def message_stream(
     room_id: str,
     user_or_err: User | str = Depends(get_user_from_qp_dep),
 ):
+    print("reached_here")
+
 
     if type(user_or_err) is str:
         print("user_or_err: ", user_or_err)
@@ -63,7 +65,13 @@ async def message_stream(
 
     return StreamingResponse(
         message_event_generator(room),
-        media_type="text/event-stream"
+        media_type="text/event-stream",
+
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Important for some proxies
+        }
     )
 
 

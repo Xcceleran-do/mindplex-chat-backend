@@ -23,7 +23,7 @@ async def lifespan(_: FastAPI):
     SQLModel.metadata.create_all(engine)
     wait_for_postgres()
     yield
-    SQLModel.metadata.drop_all(engine)
+    # SQLModel.metadata.drop_all(engine)
 
 
 app = FastAPI(lifespan=lifespan)
