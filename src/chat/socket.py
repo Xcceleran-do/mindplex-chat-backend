@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -22,7 +23,6 @@ class WSMessageType(str, Enum):
 class WSMessage(BaseModel):
     type: WSMessageType
     message: Optional[Message | str] 
-    sender: Optional[User]  # TODO: deprecate
 
     class Config:
         arbitrary_types_allowed = True
@@ -103,16 +103,35 @@ async def websocket_endpoint(
         WSResponse(
             success=True,
             message=WSMessage(
-                type=WSMessageType.CONNECTED, message=None, sender=None
+                type=WSMessageType.CONNECTED, message=None
             ),
         ).model_dump(exclude_none=True)
+    )
+
+    async def listen_for_new_messages(websocket: WebSocket, room: Room):
+        async for message in room.message_stream():
+            try:
+                await websocket.send_json(
+                    WSResponse(
+                        success=True,
+                        message=WSMessage(
+                            type=WSMessageType.TEXT,
+                            message=message,
+                        ),
+                    ).model_dump(exclude_none=True)
+                )
+            except WebSocketDisconnect:
+                break
+
+    _ = asyncio.create_task(
+        listen_for_new_messages(websocket, room_for_validation)
     )
 
     try:
         while True:
             message_json = await websocket.receive_json()
             try:
-                data = WSMessage(**message_json, sender=None)
+                data = WSMessage(**message_json)
             except ValidationError as ve:
                 response = WSResponse(
                     success=False,
