@@ -13,55 +13,6 @@ dotenv.load_dotenv()
 router = APIRouter(prefix="/ws")
 
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: dict[str, list[WebSocket]] = {}
-
-    async def connect(self, websocket: WebSocket, room_id: str):
-        """Connect websocket to room"""
-        await websocket.accept()
-        await websocket.send_json(
-            WSResponse(
-                success=True,
-                message=WSMessage(
-                    type=WSMessageType.CONNECTED, message=None, sender=None
-                ),
-            ).model_dump(exclude_none=True)
-        )
-
-        if room_id not in self.active_connections:
-            self.active_connections[room_id] = []
-
-        self.active_connections[room_id].append(websocket)
-
-    async def disconnect(self, websocket: WebSocket, room_id: str):
-        self.active_connections[room_id].remove(websocket)
-
-    async def send_message(
-        self, message: "Message", room_id: str, websocket: WebSocket
-    ):
-        """
-        Send a message to a specific room excluding the sender.
-
-        Args:
-            message (str): the message to send
-            room_id (str): the room to send the message to
-            websocket (WebSocket): the websocket to exclude
-        """
-
-        # raise Exception("Connections: ", self.active_connections)
-        for connection in self.active_connections[room_id]:
-            if connection != websocket:
-                await connection.send_json(
-                    WSResponse(
-                        success=True,
-                        message=WSMessage(
-                            type=WSMessageType.TEXT, message=message, sender=None
-                        )
-                    ).model_dump(exclude_none=True)
-                )
-
-
 class WSMessageType(str, Enum):
     TEXT = "text"
     CONNECTED = "connected"
@@ -90,9 +41,6 @@ class WSResponse(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
-
-
-connections = ConnectionManager()
 
 
 @router.websocket("/rooms/{room_id}")
@@ -149,13 +97,22 @@ async def websocket_endpoint(
 
         assert room_for_validation.id
 
-    await connections.connect(websocket, room_id)
+    # accept connection
+    await websocket.accept()
+    await websocket.send_json(
+        WSResponse(
+            success=True,
+            message=WSMessage(
+                type=WSMessageType.CONNECTED, message=None, sender=None
+            ),
+        ).model_dump(exclude_none=True)
+    )
 
     try:
         while True:
             message_json = await websocket.receive_json()
             try:
-                data = WSMessage(**message_json)
+                data = WSMessage(**message_json, sender=None)
             except ValidationError as ve:
                 response = WSResponse(
                     success=False,
@@ -170,20 +127,26 @@ async def websocket_endpoint(
 
             with Session(engine) as session:
 
+                # room and user should exist here
                 room = await Room.get_by_id(room_id, session, raise_exc=True)
                 user = await User.from_remote_or_db(user_id, session)  # user must exist in local db
-                assert room
+                assert room and room.id
+                assert user and user.id
+                assert type(data.message) == Message
 
-                message = Message(owner=user, text=data.message, room=room)
+                message = Message(
+                    owner_id=user.id,
+                    room_id=room.id,
+                    text=data.message.text,
+                    room=room
+                )
 
                 session.add(message)
                 session.commit()
                 session.refresh(message)
-                session.refresh(user)
-                session.refresh(room)
 
-
-            await connections.send_message(message, room_id, websocket)
+            # await connections.send_message(message, room_id, websocket)
+            await room.send_message([message])
             await websocket.send_json(
                 WSResponse(
                     success=True,
@@ -194,8 +157,6 @@ async def websocket_endpoint(
             )
 
     except WebSocketDisconnect:
-        await connections.disconnect(websocket, room_id)
-        # return session
         session.close()
 
 
