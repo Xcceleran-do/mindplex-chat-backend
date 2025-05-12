@@ -5,7 +5,6 @@
 	import { Label } from "$lib/components/ui/label/index.js";
 	import Button from "@/components/ui/button/button.svelte";
 	import RoomListMember from "@/components/roomListMember.svelte";
-	import CircleArrowLeft from "@lucide/svelte/icons/circle-arrow-left";
 </script>
 
 

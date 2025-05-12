@@ -18,15 +18,9 @@ async function fetchChatBackend(
 	};
 	const response = await fetch(`${BACKEND_HOST}/${path}`, fetchParams);
 
-
 	if (response.status != 200) {
 		console.error("ChatBackendError: " + response.status + " " + response.statusText);
-		console.log(JSON.stringify(fetchParams.headers));
-		try {
-			console.log(JSON.stringify(await response.json()));
-		} catch {
-			console.log(await response.text());
-		}
+		console.log(await response.text());
 		console.log("-".repeat(50));
 		return
 	}

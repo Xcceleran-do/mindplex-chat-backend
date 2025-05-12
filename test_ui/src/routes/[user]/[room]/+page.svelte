@@ -21,7 +21,7 @@
 		if (browser) {
 			console.log("Using SSE");
 			let eventSource = new EventSource(
-				`http://localhost:9010/sse/${data.currentRoom.id}?token=${data.token}&username=${data.username}`,
+				`http://localhost:9010/sse/${data.currentRoom.id}/?token=${data.token}&username=${data.username}`,
 			)
 
 			eventSource.onmessage = (event) => {
