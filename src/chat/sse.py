@@ -35,16 +35,11 @@ async def message_stream(
     room_id: str,
     user_or_err: User | str = Depends(get_user_from_qp_dep),
 ):
-    print("reached_here")
-
-
     if type(user_or_err) is str:
-        print("user_or_err: ", user_or_err)
         raise HTTPException(
             status_code=401,
             detail=user_or_err
         )
-
     user = user_or_err
 
     with Session(engine) as session:
@@ -63,10 +58,10 @@ async def message_stream(
                 detail="User is not in the room",
             )
 
+
     return StreamingResponse(
         message_event_generator(room),
         media_type="text/event-stream",
-
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",

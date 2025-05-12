@@ -17,7 +17,6 @@ class TestGetUsers:
 
     def test_no_auth(self, token: str, client: TestClient):
         response = client.get("/users/dave")
-        print(response.json())
         assert response.is_client_error
     
     def test_get_user_by_valid_username(self, client: TestClient, token: str, users: list[User]):
@@ -70,7 +69,6 @@ class TestGetMe:
         response = client.get(
             "/users/me", headers={"Authorization": f"Bearer {token}", "X-Username": "dave"}
         )
-        print(response.json())
         assert response.status_code == 200
 
         data = response.json()

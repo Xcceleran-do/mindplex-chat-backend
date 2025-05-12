@@ -68,7 +68,6 @@ class TestRoom:
         exc_info = None
         with pytest.raises(RoomValidationException) as e:
             exc_info = e
-            print("users 2 id: ", users[2].id)
             await rooms[1].add_participant(session, users[2])
             session.commit()
         assert exc_info
@@ -276,7 +275,6 @@ class TestRoom:
     #         producer.flush()
     #
     #     def collect_messages(room: Room):
-    #         print("collecting messages with a thread")
     #         gen = room.message_stream()
     #
     #         for _ in range(len(messages)):
@@ -301,5 +299,4 @@ class TestRoom:
     #         print(errors)
     #
     #     assert len(errors) == 0
-
 

@@ -19,6 +19,8 @@ from psycopg2 import OperationalError
 import secrets
 import time
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+import asyncio
+import logging
 
 
 POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
@@ -342,7 +344,6 @@ class Room(RoomBase, table=True):
     def kafka_group_name(self):
         return f"{self.__kafka_group_prefix__}-{self.id}"
 
-
     async def kafka_consumer(self):
         consumer = AIOKafkaConsumer(
             self.kafka_topic_name(),
@@ -354,6 +355,15 @@ class Room(RoomBase, table=True):
 
         # Get cluster layout and join group `my-group`
         await consumer.start()
+
+        timeout = time.time() + 10
+
+        while self.kafka_topic_name() not in await consumer.topics():
+            await asyncio.sleep(0.1)
+            if time.time() > timeout:
+                raise Exception("Topic not found")
+
+
         return consumer
 
     async def kafka_producer(self):
@@ -364,40 +374,6 @@ class Room(RoomBase, table=True):
         await producer.start()
 
         return producer
-
-    def create_kafka_topic(self) -> Optional[Any]:
-        """ Creates a kafka topic for the room. does nothing if the topic already exists
-
-        Raises:
-        """
-
-        admin_client = AdminClient({'bootstrap.servers': KAFKA_BOOTSTRAP_SERVERS})
-        partitions = 2 if self.room_type == RoomType.PRIVATE else 6
-
-        try:
-            topic_future = admin_client.create_topics(
-                [
-                    NewTopic(
-                        topic=self.kafka_topic_name(),
-                        num_partitions=partitions,
-                        replication_factor=1,
-                    )
-                ]
-            )
-            topic_future[self.kafka_topic_name()].result(10)
-
-        except KafkaException as ke:
-            if ke.args[0].error == KafkaError.TOPIC_ALREADY_EXISTS:
-                return None 
-            else:
-                raise
-
-    @staticmethod
-    def ack(err, msg):
-        if err is not None:
-            print("Failed to deliver message: {}".format(err.str()))
-        else:
-            print("Message produced: {}".format(msg.topic()))
 
 
 class RoomCreate(RoomBase):

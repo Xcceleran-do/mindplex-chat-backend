@@ -194,7 +194,6 @@ async def websocket_endpoint(
             )
 
     except WebSocketDisconnect:
-        print("A user has disconnected: ", websocket)
         await connections.disconnect(websocket, room_id)
         # return session
         session.close()

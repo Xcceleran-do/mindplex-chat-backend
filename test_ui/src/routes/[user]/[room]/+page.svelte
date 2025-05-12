@@ -28,7 +28,13 @@
 				console.log("New message!!!")
 				console.log(event.data)
 			}
-			console.log("is connected: ", eventSource.readyState === EventSource.OPEN);
+			eventSource.onopen = () => {
+				console.log("SSE connection opened")
+			}
+			eventSource.onerror = (e) => {
+				console.error("SSE connection error")
+				console.log(e)
+			}
 		}
 
 	} else {

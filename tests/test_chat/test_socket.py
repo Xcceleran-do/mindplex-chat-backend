@@ -15,9 +15,6 @@ class TestWebSocketEndpoint:
 
         with client.websocket_connect(endpoint) as websocket:
             response = websocket.receive_json()
-            print("response: ", response)
-            print("response type: ", type(response))
-            print("response keys: ", response.keys())
 
             assert response["success"] == False
             assert response["error"]["status_code"] == 401
