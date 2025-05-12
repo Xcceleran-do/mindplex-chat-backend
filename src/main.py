@@ -9,7 +9,7 @@ from confluent_kafka import Producer, Consumer, KafkaException, KafkaError
 
 from .dependencies import DEFAULT_UNIVERSAL_GROUP_EXPIRY
 from .chat import socket, sse
-from .models import SQLModel, engine
+from .models import SQLModel, engine, wait_for_postgres
 from .tasks import remove_expired_rooms_once
 from .routers import users, rooms
 
@@ -21,7 +21,9 @@ dotenv.load_dotenv()
 async def lifespan(_: FastAPI):
     # TODO: create proper db migrations. see https://alembic.sqlalchemy.org/en/latest/ 
     SQLModel.metadata.create_all(engine)
+    wait_for_postgres()
     yield
+    SQLModel.metadata.drop_all(engine)
 
 
 app = FastAPI(lifespan=lifespan)

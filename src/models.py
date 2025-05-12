@@ -37,7 +37,14 @@ engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTG
 
 # Helpers
 
-def wait_for_postgres(host, port, db, user, password, timeout=30):
+def wait_for_postgres(
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        db=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        timeout=30
+):
     start = time.time()
     while True:
         try:
@@ -49,12 +56,14 @@ def wait_for_postgres(host, port, db, user, password, timeout=30):
                 port=port,
             )
             conn.close()
+            print("Connected to PostgreSQL")
             break
         except OperationalError as e:
             if time.time() - start > timeout:
                 raise e
             print("Waiting for PostgreSQL...")
             time.sleep(1)
+
 
 
 def generate_id():
