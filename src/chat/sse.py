@@ -1,4 +1,5 @@
 from enum import Enum
+import json
 from typing import Optional
 
 from src.dependencies import get_user_dep, get_user_from_qp_dep
@@ -12,21 +13,13 @@ import asyncio
 router = APIRouter(prefix="/sse")
 
 
-class SSEMessageType(str, Enum):
-    TEXT = "text"
-    CONNECTED = "connected"
-
-
-class SSEMessage(BaseModel):
-    type: SSEMessageType
-    text: Optional[Message | str]
-
-    class Config:
-        arbitrary_types_allowed = True
-
-
-async def message_event_generator(room: Room):
-    async for msg in room.message_stream():
+async def message_event_generator(room: Room, user: User):
+    async for msg in room.message_stream(user):
+        # TODO: add id
+        response_text = "event: text\n"
+        response_text += f"data: {json.dumps(msg.model_dump(exclude_none=True)).encode('utf-8')}\n" 
+        response_text += "retry: 1000\n"
+        response_text += "\n"
         yield f"data: This is a Message -> {msg.text}\n\n"
 
 
@@ -60,7 +53,7 @@ async def message_stream(
 
 
     return StreamingResponse(
-        message_event_generator(room),
+        message_event_generator(room, user),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

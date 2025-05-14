@@ -2,6 +2,7 @@ import asyncio
 from enum import Enum
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.websockets import WebSocketState
 from pydantic import BaseModel, ValidationError, model_validator
 from fastapi import WebSocket
 from sqlmodel import select
@@ -81,8 +82,10 @@ async def websocket_endpoint(
             await websocket.close()
             return
 
-        # check if user is in room
-        if not await room_for_validation.is_user_in_room(session, user) and room_for_validation.room_type == RoomType.PRIVATE:
+        if (
+            (not await room_for_validation.is_user_in_room(session, user))
+            and room_for_validation.room_type == RoomType.PRIVATE
+        ):
             await websocket.accept()
             response = WSResponse(
                 success=False,
@@ -97,35 +100,44 @@ async def websocket_endpoint(
 
         assert room_for_validation.id
 
-    # accept connection
-    await websocket.accept()
-    await websocket.send_json(
-        WSResponse(
-            success=True,
-            message=WSMessage(
-                type=WSMessageType.CONNECTED, message=None
-            ),
-        ).model_dump(exclude_none=True)
-    )
+        # accept connection
+        try:
+            await websocket.accept()
+            await websocket.send_json(
+                WSResponse(
+                    success=True,
+                    message=WSMessage(
+                        type=WSMessageType.CONNECTED, message=None
+                    ),
+                ).model_dump(exclude_none=True)
+            )
+        except Exception as e:
+            print(e)
+            return
 
-    async def listen_for_new_messages(websocket: WebSocket, room: Room):
-        async for message in room.message_stream():
-            try:
-                await websocket.send_json(
-                    WSResponse(
-                        success=True,
-                        message=WSMessage(
-                            type=WSMessageType.TEXT,
-                            message=message,
-                        ),
-                    ).model_dump(exclude_none=True)
-                )
-            except WebSocketDisconnect:
-                break
+        async def listen_for_new_messages(websocket: WebSocket, room: Room, user: User = user):
+            async for message in room.message_stream(user):
+                try:
+                    await websocket.send_json(
+                        WSResponse(
+                            success=True,
+                            message=WSMessage(
+                                type=WSMessageType.TEXT,
+                                message=message,
+                            ),
+                        ).model_dump(exclude_none=True)
+                    )
+                except WebSocketDisconnect:
+                    return
 
-    _ = asyncio.create_task(
-        listen_for_new_messages(websocket, room_for_validation)
-    )
+        try:
+            print("Starting listener task")
+            listener_task = await asyncio.create_task(
+                listen_for_new_messages(websocket, room_for_validation, user)
+            )
+        finally:
+            print("Listener task cancelled")
+
 
     try:
         while True:
@@ -151,12 +163,12 @@ async def websocket_endpoint(
                 user = await User.from_remote_or_db(user_id, session)  # user must exist in local db
                 assert room and room.id
                 assert user and user.id
-                assert type(data.message) == Message
+                assert type(data.message) == str
 
                 message = Message(
                     owner_id=user.id,
                     room_id=room.id,
-                    text=data.message.text,
+                    text=data.message,
                     room=room
                 )
 
@@ -164,18 +176,18 @@ async def websocket_endpoint(
                 session.commit()
                 session.refresh(message)
 
-            # await connections.send_message(message, room_id, websocket)
-            await room.send_message([message])
-            await websocket.send_json(
-                WSResponse(
-                    success=True,
-                    message=WSMessage(
-                        type=WSMessageType.SENT_CONFIRMATION, message=message, sender=user
-                    ),
-                ).model_dump(exclude_none=True)
-            )
+                await room.send_message([message])
+                await websocket.send_json(
+                    WSResponse(
+                        success=True,
+                        message=WSMessage(
+                            type=WSMessageType.SENT_CONFIRMATION, message=message
+                        ),
+                    ).model_dump(exclude_none=True)
+                )
 
     except WebSocketDisconnect:
+        # await websocket.close()
         session.close()
 
 
