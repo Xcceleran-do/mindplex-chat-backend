@@ -1,7 +1,14 @@
+from ..fixtures import *
+from fastapi.testclient import TestClient
 
 class TestMessageStream:
 
-    def test_message_stream(self):
+    def test_message_stream(
+        self,
+        client: TestClient,
+        token: str,
+        rooms: list[Room]
+    ):
         pass
 
     def test_without_room(self):

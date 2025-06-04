@@ -2,6 +2,8 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Header, Query
 from jwt.exceptions import InvalidTokenError
 from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
 from src.models import User, engine
 import jwt
 
@@ -9,12 +11,18 @@ import jwt
 # settings and constants
 DEFAULT_UNIVERSAL_GROUP_EXPIRY = 10 * 60
 
-def get_session():
-    with Session(engine) as session:
+async_session = sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+async def get_session():
+    async with async_session() as session:
         yield session
 
 
-def get_user(authorization: str, session: Session, *args, **kwargs) -> User:
+async def get_user(authorization: str, session: AsyncSession, *args, **kwargs) -> User:
     """Given Authorization header as string, authenticates and returns the user.
     Creates the user if it doesn't exist.
 
@@ -57,33 +65,34 @@ def get_user(authorization: str, session: Session, *args, **kwargs) -> User:
         raise HTTPException(status_code=401, detail="Missing username header")
 
     # get or create the user
-    user = session.exec(select(User).where(User.remote_id == remote_id)).first()
+    user = await session.execute(select(User).where(User.remote_id == remote_id))
+    user = user.scalars().first()
 
     if user is None:
         user = User(
             remote_id=remote_id,
         )
         session.add(user)
-        session.commit()
-        session.refresh(user)
+        await session.commit()
+        await session.refresh(user)
 
     return user
 
 
 async def get_user_dep(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
     authorization: Annotated[str, Header()],
     x_username: Annotated[str, Header()]
 ) -> User:
-    return get_user(authorization, session, username=x_username)
+    return await get_user(authorization, session, username=x_username)
 
 
 async def get_user_from_qp_dep(
-    session: Annotated[Session, Depends(get_session)], token: Annotated[str, Query()], username: Annotated[str, Query()]
+    session: Annotated[AsyncSession, Depends(get_session)], token: Annotated[str, Query()], username: Annotated[str, Query()]
 ) -> User | str:
     try:
         authorization = f"Bearer {token}"
-        return get_user(authorization, session, username=username)
+        return await get_user(authorization, session, username=username)
     except HTTPException as e:
         return str(e)
 

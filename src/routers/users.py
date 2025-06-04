@@ -1,5 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import User, UserNotFoundException, Session
 from ..dependencies import get_session, get_user_dep
 
@@ -17,7 +18,7 @@ async def get_me(user: Annotated[User, Depends(get_user_dep)]):
 
 @router.get("/{username}", response_model=User)
 async def get_users(
-        session: Annotated[Session, Depends(get_session)],
+        session: Annotated[AsyncSession, Depends(get_session)],
         user: Annotated[User, Depends(get_user_dep)],
         username: str
 ):

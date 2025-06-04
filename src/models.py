@@ -3,6 +3,7 @@ from enum import Enum
 import os
 import json
 from typing import Any, AsyncGenerator, Optional
+from pydantic import field_serializer
 from sqlmodel import (
     Relationship,
     Field,
@@ -13,6 +14,7 @@ from sqlmodel import (
     insert,
     select,
 )
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from .api import Mindplex, MindplexApiException
 import psycopg2
 from psycopg2 import OperationalError
@@ -20,7 +22,6 @@ import secrets
 import time
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 import asyncio
-import logging
 
 
 POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
@@ -30,14 +31,15 @@ POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
 POSTGRES_USER = os.environ.get("POSTGRES_USER")
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 
-engine = create_engine(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
+engine = create_async_engine(f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
     pool_size=10,
-    max_overflow=20
+    max_overflow=20,
+    echo=True
 )
 
 # Helpers
 
-def wait_for_postgres(
+async def wait_for_postgres(
         host=POSTGRES_HOST,
         port=POSTGRES_PORT,
         db=POSTGRES_DB,
@@ -64,7 +66,6 @@ def wait_for_postgres(
                 raise e
             print("Waiting for PostgreSQL...")
             time.sleep(1)
-
 
 
 def generate_id():
@@ -108,7 +109,7 @@ class User(SQLModel, table=True):
         return self.rooms + self.owned_rooms
 
     @classmethod
-    async def from_remote_or_db(cls, remote_id, session: Session) -> "User":
+    async def from_remote_or_db(cls, remote_id, session: AsyncSession) -> "User":
         """gets a user from remote servers or the local database respectively
 
         Args:
@@ -123,7 +124,8 @@ class User(SQLModel, table=True):
             db
         """
 
-        user = session.exec(select(User).where(User.remote_id == remote_id)).first()
+        user = await session.execute(select(User).where(User.remote_id == remote_id))
+        user = user.scalars().first()
 
         if user is not None:
             return user
@@ -134,8 +136,8 @@ class User(SQLModel, table=True):
             remote_user = await mpx_sdk.get_user(remote_id)
             user = User(remote_id=await mpx_sdk.get_user_id(remote_user))
             session.add(user)
-            session.commit()
-            session.refresh(user)
+            await session.commit()
+            await session.refresh(user)
             return user
         except MindplexApiException:
             raise UserNotFoundException(
@@ -153,7 +155,7 @@ def with_session(func, *args, **kwargs):
         session = kwargs.pop("session", None)
 
         if session is None:
-            with Session(engine) as session:
+            async with AsyncSession(engine) as session:
                 return await func(*args, session=session, **kwargs)
         else:
             return await func(*args, session=session, **kwargs)
@@ -163,7 +165,6 @@ def with_session(func, *args, **kwargs):
 
 class Room(RoomBase, table=True):
     id: str | None = Field(default_factory=generate_id, primary_key=True)
-
     participants: list[User] = Relationship(
         back_populates="rooms", link_model=RoomParticipantLink
     )
@@ -221,7 +222,7 @@ class Room(RoomBase, table=True):
     async def is_message_in_room(self, message: "Message"):
         return message in self.messages
 
-    async def is_user_in_room(self, session: Session, user: "User"):
+    async def is_user_in_room(self, session: AsyncSession, user: "User"):
         """checks if a user is in the room as a participant or owner
 
         Args:
@@ -247,7 +248,7 @@ class Room(RoomBase, table=True):
     async def get_by_id(
         cls,
         room_id: str,
-        session: Session,
+        session: AsyncSession,
         raise_exc: bool=True
     ) -> Optional["Room"]:
         """Gets a room by id
@@ -265,7 +266,9 @@ class Room(RoomBase, table=True):
             Room: the room
             None: if the room is not found and raise_exc is False
         """
-        room = session.exec(select(cls).where(cls.id == room_id)).first()
+        room = await session.execute(select(cls).where(cls.id == room_id))
+        room = room.scalars().first()
+
         if room is None and raise_exc:
             raise RoomNotFoundException("Room not found")
         return room
@@ -316,7 +319,7 @@ class Room(RoomBase, table=True):
 
         return messages
 
-    async def message_stream(self) -> AsyncGenerator["Message"]:
+    async def message_stream(self, user: "User") -> AsyncGenerator["Message"]:
         """ Generates a stream of messages from a kafka topic representing the room
 
         Yields:
@@ -328,12 +331,15 @@ class Room(RoomBase, table=True):
             # Consume messages
             async for msg in consumer:
                 msg = json.loads(msg.value.decode('utf-8'))
-
-                with Session(engine) as session:
-                    message = session.exec(select(Message).where(Message.id == msg["message_id"])).first()
+                with AsyncSession(engine) as session:
+                    message = session.exec(
+                        select(Message).where(Message.id == msg["message_id"])).first()
                     assert message is not None
 
-                yield message
+                    if message.owner_id == user.id:
+                        continue
+                    else:
+                        yield message
         finally:
             # Will leave consumer group; perform autocommit if enabled.
             await consumer.stop()
@@ -348,7 +354,7 @@ class Room(RoomBase, table=True):
         consumer = AIOKafkaConsumer(
             self.kafka_topic_name(),
             bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-            group_id=self.kafka_group_name(),
+            group_id="fastapi-kafka",
             auto_offset_reset="earliest",
             enable_auto_commit=True,
         )
@@ -399,6 +405,12 @@ class Message(MessageBase, table=True):
     room: Room = Relationship(back_populates="messages")
 
 
+    # serialize 'created'
+    @field_serializer("created")
+    def serialize_created(self, value: datetime) -> str:
+        return value.isoformat()
+
+
 class RoomNotFoundException(Exception):
     pass
 
@@ -413,9 +425,5 @@ class UserNotFoundException(Exception):
 
 class MessageNotFoundException(Exception):
     pass
-
-
-if __name__ == "__main__":
-    SQLModel.metadata.create_all(engine)
 
 

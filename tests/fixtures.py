@@ -298,20 +298,22 @@ def user_token_fixture():
     return response.json()['token']
 
 
-@pytest.fixture(name="tony_token")
-def tony_token_fixture():
+@pytest.fixture(name="test_token1")
+def test_token1_fixture():
 
     url = "https://staging.mindplex.ai/wp-json/auth/v1/token"
 
     payload = {
-        "username": "ivan",
-        "password": "ivan",
+        "username": "test151",
+        "password": "Test@123",
+        "login_with":"email_password",
+        "login_from" : "Android"
     }
 
     # Send the request
     response = httpx.post(url, data=payload)
 
-    return response.json()
+    return response.json()['token']
 
 
 @pytest.fixture(name="a_lot_of_rooms")

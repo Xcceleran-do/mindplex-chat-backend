@@ -225,7 +225,7 @@ class TestRoom:
         finally:
             await producer.stop()
 
-        new_messages = rooms[0].message_stream()
+        new_messages = rooms[0].message_stream(users[1])
 
         try:
             msg1 = await asyncio.wait_for(anext(new_messages), 5)

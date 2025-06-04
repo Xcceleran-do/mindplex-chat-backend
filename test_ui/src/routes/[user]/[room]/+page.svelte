@@ -9,73 +9,86 @@
 	import { twMerge } from "tailwind-merge";
 	import { clsx } from "clsx";
 	import type { ClassValue } from "clsx";
-	import {  BACKEND_HOST  } from '$lib/api';
+	import { page } from "$app/state";
 
 	let { data } = $props();
 
 	let ws: WebSocket | undefined = undefined;
 
-	let useSse = true;
-	
-	if (useSse) {
-		if (browser) {
-			console.log("Using SSE");
-			let eventSource = new EventSource(
-				`http://localhost:9010/sse/${data.currentRoom.id}/?token=${data.token}&username=${data.username}`,
-			)
+	// get useSse from url query parameters
+	//let useSse = true;
+	let useSse = page.params.sse === "true";
 
-			eventSource.onmessage = (event) => {
-				console.log("New message!!!")
-				console.log(event.data)
-			}
-			eventSource.onopen = () => {
-				console.log("SSE connection opened")
-			}
-			eventSource.onerror = (e) => {
-				console.error("SSE connection error")
-				console.log(e)
+	async function addMessage(msg: any, local: boolean = false) {
+		if (local) {
+			messages.push({
+				id: "",
+				owner_id: data.user.id,
+				text: msg,
+				created: new Date().toISOString(),
+			})
+		} else {
+			if (!msg) {
+				console.error("Message is not recognized")
+			} else if (msg.type === "text") {
+				console.log("Message received:", msg.message.text)
+				messages.push(msg.message)
+			} else if (msg.type === "connected") {
+				console.log("Websocket connection confirmed")
+			} else if (msg.type === "sent_confirmation") {
+				console.log("Message sent: ", msg.message.text)
+			} else {
+				console.error("Unknown message type:", msg)
 			}
 		}
+	}
+	
+	if (browser) {
+		if (useSse) {
+				console.log("Using SSE");
+				let eventSource = new EventSource(
+					`http://localhost:9010/sse/${data.currentRoom.id}/?token=${data.token}&username=${data.username}`,
+				)
 
-	} else {
-		if (browser) {
-			ws = new WebSocket(
-				`ws://localhost:9010/ws/rooms/${data.currentRoom.id}?token=${data.token}&username=${data.username}`
-			);
-
-			ws.onopen = () => {
-				console.log("Connected to WebSocket server");
-			};
-
-			ws.onerror = (e) => {
-				console.log(e)
-			};
-
-			ws.onmessage = (event) => {
-				let data = JSON.parse(JSON.parse(event.data));
-				let msg = data?.message
-
-				if (!msg) {
-					console.error("Message is not recognized")
-				} else if (msg.type === "text") {
-					messages.push(msg.message)
-				} else if (msg.type === "connected") {
-					console.log("Websockket connection confirmed")
-				} else if (msg.type === "sent_confirmation") {
-					messages.push(msg.message)
-				} else {
-					console.error("Unknown message type:", msg)
+				eventSource.onmessage = (event) => {
+					let data = JSON.parse(event.data);
+					let msg = data?.message
+					addMessage(msg);
 				}
-			};
+				eventSource.onopen = () => {
+					console.log("SSE connection opened")
+				}
+				eventSource.onerror = (e) => {
+					console.error("SSE connection error")
+					console.log(e)
+				}
 
-			ws.onerror = (error) => {
-				console.error("WebSocket error:", error);
-			};
+		} else {
+				ws = new WebSocket(
+					`ws://localhost:9010/ws/rooms/${data.currentRoom.id}?token=${data.token}&username=${data.username}`
+				);
 
-			ws.onclose = () => {
-				console.log("WebSocket connection closed");
-			};
+				ws.onopen = () => {
+					console.log("Connected to WebSocket server");
+				};
 
+				ws.onerror = (e) => {
+					console.log(e)
+				};
+
+				ws.onmessage = (event) => {
+					let data = JSON.parse(event.data);
+					let msg = data?.message
+					addMessage(msg);
+				};
+
+				ws.onerror = (error) => {
+					console.error("WebSocket error:", error);
+				};
+
+				ws.onclose = () => {
+					console.log("WebSocket connection closed");
+				};
 		}
 	}
 
@@ -134,13 +147,10 @@
 					onsubmit={(event) => {
 						event.preventDefault();
 						if (input.length === 0) return;
-						let msg = {
-							type: "text",
-							message: input,
-							sender: null
-						}
+						let msg = input
 						if (ws !== undefined) {
-							ws.send(JSON.stringify(msg));
+							ws.send(JSON.stringify({ type: "text", message: msg }));
+							addMessage(msg, true);
 						} else {
 							console.log("WebSocket not connected")
 						}

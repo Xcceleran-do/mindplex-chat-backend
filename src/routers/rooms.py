@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_filter import FilterDepends
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import Session, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -20,7 +21,7 @@ router = APIRouter(
 
 @router.get("/", response_model=list[Room])
 async def get_rooms(
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
     filter: RoomFilter = FilterDepends(RoomFilter), 
     participant__id: Annotated[Optional[str], Query()] = None,
@@ -60,7 +61,8 @@ async def get_rooms(
 
     query = filter.filter(query)
 
-    rooms = session.exec(query).all()
+    rooms = await session.execute(query)
+    rooms = rooms.scalars().all()
 
     # in memory filters, have low cost but change back to sql when possible for efficiency
     if peer__id is not None:
@@ -89,7 +91,7 @@ async def get_rooms(
 async def create_room(
     room: RoomCreate,
     user: Annotated[User, Depends(get_user_dep)],
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ):
 
     if room.room_type == RoomType.PRIVATE:
@@ -112,8 +114,8 @@ async def create_room(
 
         db_room: Room = Room(**room_dict, owner=user)
         session.add(db_room)
-        session.commit()
-        session.refresh(db_room)
+        await session.commit()
+        await session.refresh(db_room)
     except IntegrityError as e:
         raise HTTPException(status_code=400, detail="room already exists")
 
@@ -123,7 +125,7 @@ async def create_room(
 @router.get("/{room_id}", response_model=Room)
 async def get_room(
     room_id: str,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
     try:
@@ -146,15 +148,15 @@ async def get_room(
 @router.post("/{room_id}/interaction", response_model=Room)
 async def update_room_interaction(
     room_id: str,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
     room = await Room.get_by_id(room_id, session, raise_exc=True)
     assert room
 
     room.last_interacted = datetime.now()
-    session.commit()
-    session.refresh(room)
+    await session.commit()
+    await session.refresh(room)
 
     return room
 
@@ -162,7 +164,7 @@ async def update_room_interaction(
 @router.get("/{room_id}/participants", response_model=list[User])
 async def get_room_participants(
     room_id: str,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
 
@@ -195,7 +197,7 @@ async def get_room_participants(
 @router.get("/{room_id}/messages", response_model=list[Message])
 async def get_room_messages(
     room_id: str,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
     filter: MessageFilter = FilterDepends(MessageFilter),
     offset: Annotated[Optional[int], Query()] = None,
@@ -230,7 +232,7 @@ async def get_room_messages(
         query = query.limit(limit)
         query = query.offset(offset)
 
-    messages = session.exec(query).all()
+    messages = session.execute(query)
 
     return messages
 
@@ -239,7 +241,7 @@ async def get_room_messages(
 async def send_message(
     room_id: str,
     message: MessageCreate,
-    session: Annotated[Session, Depends(get_session)],
+    session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
     try:
@@ -260,13 +262,11 @@ async def send_message(
 
         session.add(db_message)
         session.add(room)
-        session.commit()
-        session.refresh(db_message)
+        await session.commit()
+        await session.refresh(db_message)
     except IntegrityError as e:
         raise HTTPException(status_code=400, detail="message already exists")
 
-
-    # send message to kafka
     _ = await room.send_message([db_message])
 
     return db_message

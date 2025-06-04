@@ -17,10 +17,12 @@ dotenv.load_dotenv()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # TODO: create proper db migrations. see https://alembic.sqlalchemy.org/en/latest/ 
-    SQLModel.metadata.create_all(engine)
-    wait_for_postgres()
+
+    await wait_for_postgres()
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+
     yield
-    # SQLModel.metadata.drop_all(engine)
 
 
 app = FastAPI(lifespan=lifespan)
