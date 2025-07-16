@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from typing import Annotated
 from fastapi import Depends, HTTPException, Header, Query
 from jwt.exceptions import InvalidTokenError
@@ -11,13 +12,26 @@ import jwt
 # settings and constants
 DEFAULT_UNIVERSAL_GROUP_EXPIRY = 10 * 60
 
-async_session = sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
-)
 
-async def get_session():
+@asynccontextmanager
+async def get_session_contextmanager() -> AsyncSession:
+    async_session = sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False
+    )
+
+    async with async_session() as session:
+        yield session
+
+
+async def get_session() -> AsyncSession:
+    async_session = sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False
+    )
+
     async with async_session() as session:
         yield session
 

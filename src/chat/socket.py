@@ -6,7 +6,7 @@ from fastapi.websockets import WebSocketState
 from pydantic import BaseModel, ValidationError, model_validator
 from fastapi import WebSocket
 from sqlmodel import select
-from ..dependencies import get_session, get_user_from_qp_dep
+from ..dependencies import get_session, get_session_contextmanager, get_user_from_qp_dep
 from ..models import Message, Room, RoomType, Session, User, engine
 import dotenv
 
@@ -66,7 +66,11 @@ async def websocket_endpoint(
     user = user_or_err
     user_id = user.remote_id
 
-    with Session(engine) as session:
+    print("__websocketlogs__")
+    print("user_id: ", user_id)
+    print("user_or_err: ", user_or_err)
+
+    async with get_session_contextmanager() as session:
         room_for_validation = await Room.get_by_id(room_id, session, raise_exc=False)
 
         # check if room exists
@@ -82,6 +86,8 @@ async def websocket_endpoint(
             await websocket.close()
             return
 
+        print("room_for_validation: ", await room_for_validation.is_user_in_room(session, user))
+        print("room_for_validation.room_type: ", room_for_validation.room_type)
         if (
             (not await room_for_validation.is_user_in_room(session, user))
             and room_for_validation.room_type == RoomType.PRIVATE
@@ -156,8 +162,7 @@ async def websocket_endpoint(
                 await websocket.send_json(response.model_dump(exclude_none=True))
                 continue
 
-            with Session(engine) as session:
-
+            async with get_session_contextmanager() as session:
                 # room and user should exist here
                 room = await Room.get_by_id(room_id, session, raise_exc=True)
                 user = await User.from_remote_or_db(user_id, session)  # user must exist in local db
@@ -173,10 +178,10 @@ async def websocket_endpoint(
                 )
 
                 session.add(message)
-                session.commit()
-                session.refresh(message)
+                await session.commit()
+                await session.refresh(message)
 
-                await room.send_message([message])
+                await room.send_message(session, [message])
                 await websocket.send_json(
                     WSResponse(
                         success=True,
@@ -188,7 +193,7 @@ async def websocket_endpoint(
 
     except WebSocketDisconnect:
         # await websocket.close()
-        session.close()
+        await session.close()
 
 
 

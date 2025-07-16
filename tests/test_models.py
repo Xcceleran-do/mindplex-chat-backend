@@ -10,55 +10,65 @@ class TestUser:
 
     @pytest.mark.asyncio
     async def test_all_rooms(
-        self, session: Session, users: list[User], rooms: list[Room]
+        self, session: AsyncSession, users: list[User], rooms: list[Room]
     ):
+        # TODO: check 0 rooms
+
         # Check owner
-        assert users[0].all_rooms() == [rooms[0]]
+        assert await users[0].all_rooms(session) == [rooms[0]]
 
         # Add user as participant
         await rooms[0].add_participant(session, users[1])
-        session.commit()
+        await session.commit()
 
-        assert users[0].all_rooms() == [rooms[0]]
-        assert users[1].all_rooms() == [rooms[0], rooms[1]]
+        assert await users[0].all_rooms(session) == [rooms[0]]
+        assert await users[1].all_rooms(session) == [rooms[0], rooms[1]]
 
 
 class TestRoom:
 
     @pytest.mark.asyncio
+    async def test_participants_(self, session: AsyncSession, users: list[User], rooms: list[Room]):
+        assert rooms[0].owner == users[0]
+        assert await rooms[0].participants_(session) == []
+        await rooms[0].add_participant(session, users[1])
+        await session.commit()
+        assert await rooms[0].participants_(session) == [users[1]]
+
+    @pytest.mark.asyncio
     async def test_add_participant(
-        self, session: Session, users: list[User], rooms: list[Room]
+        self, session: AsyncSession, users: list[User], rooms: list[Room]
     ):
 
         # Check adding multiple users
-        assert users[0].all_rooms() == [rooms[0]]  # User already exists as owner
-        assert users[1].all_rooms() == [rooms[1]]  # User already exists as owner(room2)
-        assert users[2].all_rooms() == []
+        assert await users[0].all_rooms(session) == [rooms[0]]  # User already exists as owner
+        assert await users[1].all_rooms(session) == [rooms[1]]  # User already exists as owner(room2)
+        assert await users[2].all_rooms(session) == []
 
         await rooms[0].add_participant(session, users[1])
-        session.commit()
+        await session.commit()
 
-        assert users[0].all_rooms() == [rooms[0]]
-        assert users[1].all_rooms() == [rooms[0], rooms[1]]
-        assert users[2].all_rooms() == []
+        assert await users[0].all_rooms(session) == [rooms[0]]
+        assert await users[1].all_rooms(session) == [rooms[0], rooms[1]]
+        assert await users[2].all_rooms(session) == []
 
         await rooms[0].add_participant(session, users[2])
-        session.commit()
+        await session.commit()
 
-        assert users[0].all_rooms() == [rooms[0]]
-        assert users[1].all_rooms() == [rooms[0], rooms[1]]
-        assert users[2].all_rooms() == [rooms[0]]
+        assert await users[0].all_rooms(session) == [rooms[0]]
+        assert await users[1].all_rooms(session) == [rooms[0], rooms[1]]
+        assert await users[2].all_rooms(session) == [rooms[0]]
 
         # Check adding a third user to a private room
         await rooms[1].add_participant(session, users[0])
-        session.commit()
-        assert rooms[1].participants == [users[0]]
+        await session.commit()
+        assert await rooms[1].participants_(session) == [users[0]]
 
         exc_info = None
         with pytest.raises(RoomValidationException) as e:
             exc_info = e
             await rooms[1].add_participant(session, users[0])
-            session.commit()
+            await session.commit()
         assert exc_info
         assert exc_info.value
         assert exc_info.value.args[0] == "Participant is already in the room"
@@ -69,24 +79,24 @@ class TestRoom:
         with pytest.raises(RoomValidationException) as e:
             exc_info = e
             await rooms[1].add_participant(session, users[2])
-            session.commit()
+            await session.commit()
         assert exc_info
         assert exc_info.value
         assert exc_info.value.args[0] == "Room is private"
 
     @pytest.mark.asyncio
     async def test_is_user_in_room(
-        self, session: Session, users: list[User], rooms: list[Room]
+        self, session: AsyncSession, users: list[User], rooms: list[Room]
     ):
         assert await rooms[1].is_user_in_room(session, users[1]) 
         assert not await rooms[1].is_user_in_room(session, users[0]) 
         assert not await rooms[1].is_user_in_room(session, users[2]) 
 
         await rooms[1].add_participant(session, users[0])
-        session.commit()
+        await session.commit()
 
         # check if participant only contains the added once
-        assert rooms[1].participants == [users[0]]  
+        assert await rooms[1].participants_(session) == [users[0]]  
 
         assert await rooms[1].is_user_in_room(session, users[0]) 
         assert await rooms[1].is_user_in_room(session, users[1]) 
@@ -101,7 +111,7 @@ class TestRoom:
     @pytest.mark.asyncio
     async def test_room_expiry(
             self,
-            session: Session,
+            session: AsyncSession,
             unexpired_rooms: list[Room],
             expired_rooms: list[Room],
             users: list[User]
@@ -117,7 +127,9 @@ class TestRoom:
             )
         )
 
-        queried_rooms = session.exec(query).all()
+        queried_rooms = await session.execute(query)
+        queried_rooms = queried_rooms.scalars().all()
+
         assert len(queried_rooms) == len(unexpired_rooms)
 
         for room in queried_rooms:
@@ -126,7 +138,7 @@ class TestRoom:
     @pytest.mark.asyncio
     async def test_room_expiry_deletion(
             self,
-            session: Session,
+            session: AsyncSession,
             unexpired_rooms: list[Room],
             expired_rooms: list[Room],
             users: list[User]
@@ -143,12 +155,13 @@ class TestRoom:
             )
         )
 
-        session.exec(delete_query)
-        session.commit()
+        await session.execute(delete_query)
+        await session.commit()
 
         select_query = select(Room)
-        queried_rooms = session.exec(select_query).all()
-        session.commit()
+        queried_rooms = await session.execute(select_query)
+        queried_rooms = queried_rooms.scalars().all()
+        await session.commit()
 
         assert len(queried_rooms) == len(unexpired_rooms)
 
@@ -158,7 +171,7 @@ class TestRoom:
     @pytest.mark.asyncio
     async def test_send_message(
             self,
-            session: Session,
+            session: AsyncSession,
             users: list[User],
             rooms: list[Room],
             # messages: dict[str, list[Message]],
@@ -168,16 +181,18 @@ class TestRoom:
         consumer1 = await rooms[0].kafka_consumer()
 
         try:
-            messages = [
-                Message(text="test msg 1", owner_id=users[0].id, room_id=rooms[0].id),
-                Message(text="test msg 2", owner_id=users[0].id, room_id=rooms[0].id),
-                Message(text="test msg 3", owner_id=users[0].id, room_id=rooms[0].id),
-            ]
-            rooms[0].messages.extend(messages)
-            session.commit()
-            session.refresh(rooms[0])
+            msg1 = Message(text="test msg 1", owner_id=users[0].id, room_id=rooms[0].id)
+            msg2 = Message(text="test msg 2", owner_id=users[0].id, room_id=rooms[0].id)
+            msg3 = Message(text="test msg 3", owner_id=users[0].id, room_id=rooms[0].id)
 
-            sent_msg = await rooms[0].send_message(messages)
+            session.add(msg1)
+            session.add(msg2)
+            session.add(msg3)
+            await session.commit()
+            await session.refresh(rooms[0])
+            messages = [msg1, msg2, msg3]
+
+            sent_msg = await rooms[0].send_message(session, messages)
             assert sent_msg
 
             # consume message as all other users
@@ -193,20 +208,22 @@ class TestRoom:
     @pytest.mark.asyncio
     async def test_message_stream(
         self,
-        session: Session,
+        session: AsyncSession,
         users: list[User],
         rooms: list[Room],
     ):
         assert users[0].id and rooms[0].id
-        messages = [
-            Message(text="test msg 1", owner_id=users[0].id, room_id=rooms[0].id),
-            Message(text="test msg 2", owner_id=users[0].id, room_id=rooms[0].id),
-            Message(text="test msg 3", owner_id=users[0].id, room_id=rooms[0].id),
-        ]
 
-        rooms[0].messages.extend(messages)
-        session.commit()
-        session.refresh(rooms[0])
+        msg1 = Message(text="test msg 1", owner_id=users[0].id, room_id=rooms[0].id)
+        msg2 = Message(text="test msg 2", owner_id=users[0].id, room_id=rooms[0].id)
+        msg3 = Message(text="test msg 3", owner_id=users[0].id, room_id=rooms[0].id)
+        session.add(msg1)
+        session.add(msg2)
+        session.add(msg3)
+        await session.commit()
+        await session.refresh(rooms[0])
+
+        messages = [msg1, msg2, msg3]
 
         producer = await rooms[0].kafka_producer()
         await producer.start()

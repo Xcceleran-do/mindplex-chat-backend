@@ -1,10 +1,11 @@
+from typing import Annotated
 import dotenv
 import os
 
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
-from .dependencies import DEFAULT_UNIVERSAL_GROUP_EXPIRY
+from .dependencies import DEFAULT_UNIVERSAL_GROUP_EXPIRY, get_session_contextmanager 
 from .chat import socket, sse
 from .models import SQLModel, engine, wait_for_postgres
 from .tasks import remove_expired_rooms_once
@@ -18,11 +19,16 @@ dotenv.load_dotenv()
 async def lifespan(_: FastAPI):
     # TODO: create proper db migrations. see https://alembic.sqlalchemy.org/en/latest/ 
 
+    print("Creating database tables")
     await wait_for_postgres()
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
     yield
+
+    print("Dropping database tables")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -40,12 +46,19 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["*" ],
     allow_headers=["*"],
 )
 
 @app.middleware("http")
-async def remove_expired_rooms(request, call_next):
-    await remove_expired_rooms_once(DEFAULT_UNIVERSAL_GROUP_EXPIRY)
-    response = await call_next(request)
+async def remove_expired_rooms(
+    request,
+    call_next,
+):
+    async with get_session_contextmanager() as session:
+        await remove_expired_rooms_once(DEFAULT_UNIVERSAL_GROUP_EXPIRY, session)
+        response = await call_next(request)
+
     return response
+
+

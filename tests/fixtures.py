@@ -1,13 +1,27 @@
 from datetime import datetime, timedelta
-import pytest
-from src.api import Mindplex, MindplexUser
-from src.models import RoomType, SQLModel, Room, User, Message, engine, Session 
-from src.main import app, DEFAULT_UNIVERSAL_GROUP_EXPIRY
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from src.api import Mindplex, MindplexUser
+from src.models import RoomType, SQLModel, Room, User, Message 
+from src.main import DEFAULT_UNIVERSAL_GROUP_EXPIRY
+from sqlalchemy.pool import NullPool
 import httpx
 import pytest_asyncio
+import os
+import asyncio
+import uvicorn
 
-@pytest.fixture(autouse=True)
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
+POSTGRES_DB = os.environ.get("POSTGRES_DB")
+POSTGRES_PORT = os.environ.get("POSTGRES_PORT")
+POSTGRES_USER = os.environ.get("POSTGRES_USER")
+
+
+@pytest_asyncio.fixture(autouse=True)
 def set_env_vars(monkeypatch):
     # change db
     monkeypatch.setenv("POSTGRES_USER", "test_fastapi")
@@ -16,52 +30,111 @@ def set_env_vars(monkeypatch):
     monkeypatch.setenv("POSTGRES_HOST", "test_db")
     monkeypatch.setenv("POSTGRES_PORT", "5432")
 
-@pytest.fixture
-def client():
+
+@pytest.fixture(scope="session")
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest_asyncio.fixture
+async def app():
+    from src.main import app
+    return app
+
+@pytest_asyncio.fixture
+async def client(app: FastAPI):
     """Provide a FastAPI test client."""
+    # return TestClient(app)
+
+    async with httpx.AsyncClient(
+        base_url="http://localhost:8000",
+        transport=httpx.ASGITransport(app=app)
+    ) as client:
+        yield client
+
+@pytest.fixture
+def sync_client(app: FastAPI):
     return TestClient(app)
 
 
-@pytest.fixture(name="engine")
-def engine_fixture():
-    SQLModel.metadata.create_all(engine)
-    yield engine
-    SQLModel.metadata.drop_all(engine)
+@pytest.fixture(scope='session')
+async def user():
+    async with AsyncioTestClient(app, event_loop=shared_event_loop) as client:
+        async with client.websocket_connect("/ws/") as websocket:
+            yield websocke
 
 
-@pytest.fixture(name="session")
-def session_fixture(engine):
-    with Session(engine) as session:
+@pytest_asyncio.fixture(name="engine", scope="function")
+async def engine_fixture():
+
+    from src.main import engine as test_engine
+
+    async with test_engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+    yield test_engine
+
+
+    async with test_engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.drop_all)
+    await test_engine.dispose()
+
+
+
+
+    # SQLModel.metadata.create_all(engine)
+    # yield engine
+    # SQLModel.metadata.drop_all(engine)
+
+
+@pytest_asyncio.fixture(name="session", scope="function", autouse=True)
+async def session_fixture(engine):
+    test_async_session = sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False
+    )
+
+    async with test_async_session() as session:
         yield session
 
 
-@pytest.fixture(name="client")
-def client_fixture(engine):
-    def get_session_override():
-        with Session(engine) as session:
-            yield session
 
-    app.dependency_overrides[Session] = get_session_override
-    client = TestClient(app)
-    yield client
-    app.dependency_overrides.clear()
+# @pytest_asyncio.fixture(name="client")
+# async def client_fixture(engine):
+#     test_async_session = sessionmaker(
+#         engine,
+#         class_=AsyncSession,
+#         expire_on_commit=False
+#     )
+#
+#     async def get_session_override():
+#         async with test_async_session() as session:
+#             yield session
+#
+#     app.dependency_overrides[AsyncSession] = get_session_override
+#     client = TestClient(app)
+#     yield client
+#     app.dependency_overrides.clear()
 
 
-@pytest.fixture(name="users")
-def users_fixture(session: Session):
+@pytest_asyncio.fixture(name="users")
+async def users_fixture(session: AsyncSession):
     user = User(remote_id="dave")
     user1 = User(remote_id="ivan2")
     user2 = User(remote_id="tony")
     session.add(user)
     session.add(user1)
     session.add(user2)
-    session.commit()
+    await session.commit()
 
     return [user, user1, user2]
 
 
-@pytest.fixture(name="mindplex_users")
-def mindplex_users_fixture():
+@pytest_asyncio.fixture(name="mindplex_users")
+async def mindplex_users_fixture():
     return {
         "dave": MindplexUser(
             **{
@@ -82,21 +155,21 @@ def mindplex_users_fixture():
     }
 
 
-@pytest.fixture(name="rooms")
-def rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="rooms")
+async def rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[0].id and users[1].id
     room = Room(owner_id=users[0].id)
     room1 = Room(room_type=RoomType.PRIVATE, owner_id=users[1].id)
     session.add(room)
     session.add(room1)
-    session.commit()
+    await session.commit()
 
     return [room, room1]
 
 
 @pytest_asyncio.fixture(name="rooms_with_mindplex")
 async def rooms_with_mindplex_users_fixture(
-    session: Session, mindplex_users: dict[str, MindplexUser]
+    session: AsyncSession, mindplex_users: dict[str, MindplexUser]
 ):
     mpx_sdk = Mindplex()
     user1 = User(remote_id=await mpx_sdk.get_user_id(mindplex_users["dave"]))
@@ -110,14 +183,14 @@ async def rooms_with_mindplex_users_fixture(
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.commit()
+    await session.commit()
     
     
     return [room, room2, room3]
 
 
-@pytest.fixture(name="expired_rooms")
-def expired_rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="expired_rooms")
+async def expired_rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[0].id
     room = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=100+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
     room2 = Room(owner_id=users[0].id, last_interacted=datetime.now() - timedelta(seconds=200+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
@@ -125,13 +198,13 @@ def expired_rooms_fixture(session: Session, users: list[User]):
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.commit()
+    await session.commit()
 
     return [room, room2, room3]
 
 
-@pytest.fixture(name="unexpired_rooms")
-def unexpired_rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="unexpired_rooms")
+async def unexpired_rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[0].id
     room = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=100+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
     room2 = Room(owner_id=users[0].id, last_interacted=datetime.now() + timedelta(seconds=200+DEFAULT_UNIVERSAL_GROUP_EXPIRY))
@@ -139,13 +212,13 @@ def unexpired_rooms_fixture(session: Session, users: list[User]):
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.commit()
+    await session.commit()
 
     return [room, room2, room3]
  
 
-@pytest.fixture(name="private_rooms")
-def private_rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="private_rooms")
+async def private_rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[0].id
     room = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE)
     room2 = Room(owner_id=users[0].id, room_type=RoomType.PRIVATE)
@@ -153,13 +226,13 @@ def private_rooms_fixture(session: Session, users: list[User]):
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.commit()
+    await session.commit()
 
     return [room, room2, room3]
 
 
-@pytest.fixture(name="public_rooms")
-def public_rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="public_rooms")
+async def public_rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[0].id
     room = Room(owner_id=users[0].id)
     room2 = Room(owner_id=users[0].id)
@@ -167,13 +240,13 @@ def public_rooms_fixture(session: Session, users: list[User]):
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.commit()
+    await session.commit()
 
     return [room, room2, room3]
 
 
-@pytest.fixture(name="dave_owned_rooms")
-def dave_owned_rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="dave_owned_rooms")
+async def dave_owned_rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[0].id
     room = Room(owner_id=users[0].id)
     room2 = Room(owner_id=users[0].id)
@@ -181,13 +254,13 @@ def dave_owned_rooms_fixture(session: Session, users: list[User]):
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.commit()
+    await session.commit()
 
     return [room, room2, room3]
 
 
-@pytest.fixture(name="dave_participated_rooms")
-def dave_participated_rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="dave_participated_rooms")
+async def dave_participated_rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[1].id and users[2].id
 
     room = Room(owner_id=users[1].id, participants=[users[0], users[2]])
@@ -196,13 +269,13 @@ def dave_participated_rooms_fixture(session: Session, users: list[User]):
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.commit()
+    await session.commit()
 
     return [room, room2, room3]
 
 
-@pytest.fixture(name="dave_unlinked_rooms")
-def dave_unlinked_rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="dave_unlinked_rooms")
+async def dave_unlinked_rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[1].id and users[2].id
     room = Room(owner_id=users[1].id)
     room2 = Room(owner_id=users[2].id)
@@ -210,45 +283,45 @@ def dave_unlinked_rooms_fixture(session: Session, users: list[User]):
     session.add(room)
     session.add(room2)
     session.add(room3)
-    session.commit()
+    await session.commit()
 
     return [room, room2, room3]
 
 
-@pytest.fixture(name="dave_1_private_room")
-def dave_1_private_room_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="dave_1_private_room")
+async def dave_1_private_room_fixture(session: AsyncSession, users: list[User]):
     assert users[1].id and users[0].id
     room = Room(owner_id=users[0].id, participants=[users[1]], room_type=RoomType.PRIVATE)
     session.add(room)
-    session.commit()
+    await session.commit()
 
     return [room]
 
 
-@pytest.fixture(name="dave_2_private_room")
-def dave_2_private_room_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="dave_2_private_room")
+async def dave_2_private_room_fixture(session: AsyncSession, users: list[User]):
     assert users[2].id and users[0].id
     room = Room(owner_id=users[2].id, participants=[users[0]], room_type=RoomType.PRIVATE)
     session.add(room)
-    session.commit()
+    await session.commit()
 
     return [room]
 
 
-@pytest.fixture(name="dave_private_rooms")
-def dave_private_rooms_fixture(session: Session, users: list[User]):
+@pytest_asyncio.fixture(name="dave_private_rooms")
+async def dave_private_rooms_fixture(session: AsyncSession, users: list[User]):
     assert users[1].id and users[2].id and users[0].id
     room = Room(owner_id=users[0].id, participants=[users[1]], room_type=RoomType.PRIVATE)
     room2 = Room(owner_id=users[2].id, participants=[users[0]], room_type=RoomType.PRIVATE)
     session.add(room)
     session.add(room2)
-    session.commit()
+    await session.commit()
 
     return [room, room2]
 
 
 @pytest_asyncio.fixture(name="room_with_messages")
-async def room_with_messages_fixture(session: Session, users: list[User]):
+async def room_with_messages_fixture(session: AsyncSession, users: list[User]):
     assert users[0].id and users[1].id and users[2].id
     room1 = Room(owner_id=users[0].id)
     assert room1.id
@@ -275,13 +348,13 @@ async def room_with_messages_fixture(session: Session, users: list[User]):
     session.add(message7)
     session.add(room1)
     session.add(room2)
-    session.commit()
+    await session.commit()
 
     return [room1, room2]
 
 
-@pytest.fixture(name="token")
-def user_token_fixture():
+@pytest_asyncio.fixture(name="token")
+async def user_token_fixture():
 
     url = "https://staging.mindplex.ai/wp-json/auth/v1/token"
 
@@ -293,13 +366,16 @@ def user_token_fixture():
     }
 
     # Send the request
-    response = httpx.post(url, data=payload)
+    # response = httpx.post(url, data=payload)
+    async with httpx.AsyncClient() as ac:
+        response = await ac.post(url, data=payload)
+
 
     return response.json()['token']
 
 
-@pytest.fixture(name="test_token1")
-def test_token1_fixture():
+@pytest_asyncio.fixture(name="test_token1")
+async def test_token1_fixture():
 
     url = "https://staging.mindplex.ai/wp-json/auth/v1/token"
 
@@ -316,52 +392,55 @@ def test_token1_fixture():
     return response.json()['token']
 
 
-@pytest.fixture(name="a_lot_of_rooms")
-def a_lot_of_rooms_fixture(session: Session):
+@pytest_asyncio.fixture(name="a_lot_of_rooms")
+async def a_lot_of_rooms_fixture(session: AsyncSession):
     for i in range(100):
         user = User(remote_id=f"{i}")
         assert user.id
         room = Room(owner_id=user.id)
         session.add(user)
         session.add(room)
-    session.commit()
+    await session.commit()
         
 
-@pytest.fixture(name="a_lot_of_messages")
-def a_lot_of_messages_fixture(session: Session, users: list[User], rooms: list[Room]):
+@pytest_asyncio.fixture(name="a_lot_of_messages")
+async def a_lot_of_messages_fixture(session: AsyncSession, users: list[User], rooms: list[Room]):
     all_messages: list[Message] = []
     flip = 1
+
     for i in range(50):
         room = rooms[0] if i % 2 == 0 else rooms[1]
+        assert users[0].id and room.id
         message = Message(
             text=f"message {i} by {users[0].remote_id}",
-            owner=users[0],
+            owner_id=users[0].id,
             created=datetime.now()+timedelta(days=i+1),
-            room=room
+            room_id=room.id
         )
         session.add(message)
         all_messages.append(message)
         flip *= -1
-    session.commit()
+    await session.commit()
 
     flip = 1
     for i in range(50):
         room = rooms[0] if i % 2 == 0 else rooms[1]
+        assert users[1].id and room.id
         message = Message(
             text=f"message {i} by {users[1].remote_id}",
-            owner=users[1],
+            owner_id=users[1].id,
             created=datetime.now()-timedelta(days=i+1),
-            room=room
+            room_id=room.id
         )
         session.add(message)
         all_messages.append(message)
         flip *= -1
-    session.commit()
+    await session.commit()
 
     # rooms[0].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 0]  # even
     # rooms[1].messages = [msg for (i, msg) in enumerate(all_messages) if i % 2 == 1]  # odd
 
-    session.commit()
+    await session.commit()
 
     return all_messages
 

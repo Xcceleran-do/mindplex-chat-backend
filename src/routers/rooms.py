@@ -4,6 +4,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_filter import FilterDepends
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -69,7 +70,7 @@ async def get_rooms(
         rooms = [
             room for room in rooms if (
                 (
-                    peer__id in [participant.id for participant in room.participants]
+                    peer__id in [participant.id for participant in await room.participants_(session)]
                     or peer__id == room.owner_id
                 )
                 and room.room_type == RoomType.PRIVATE
@@ -178,17 +179,26 @@ async def get_room_participants(
             status_code=403, detail="User does not have access to this room"
         )
 
-    # get all message senders
-    # TODO: currently in memory, use sql
     message_senders = []
+    messages_stmt = (
+        select(Message)
+            .options(selectinload(Message.owner))
+            .where(Message.room_id == room_id)
+    )
+
+    result = await session.execute(messages_stmt)
+    messages = result.scalars().all()
+
+
+    # TODO: optimize, loading all messages is unnecessary 
     if room.room_type == RoomType.UNIVERSAL:
-        message_senders_ = [message.owner for message in room.messages if message.owner != user]
+        message_senders_ = [message.owner for message in messages if message.owner != user]
         for message_sender in message_senders_:
             if message_sender not in message_senders:
                 message_senders.append(message_sender)
 
     assert room is not None
-    all_participants = room.participants
+    all_participants = list(await room.participants_(session))
     all_participants.extend(message_senders)
 
     return all_participants
@@ -232,7 +242,8 @@ async def get_room_messages(
         query = query.limit(limit)
         query = query.offset(offset)
 
-    messages = session.execute(query)
+    messages = await session.execute(query)
+    messages = messages.scalars().all()
 
     return messages
 
@@ -267,7 +278,7 @@ async def send_message(
     except IntegrityError as e:
         raise HTTPException(status_code=400, detail="message already exists")
 
-    _ = await room.send_message([db_message])
+    _ = await room.send_message(session, [db_message])
 
     return db_message
 

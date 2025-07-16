@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 import os
 import json
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional, Sequence
 from pydantic import field_serializer
 from sqlmodel import (
     Relationship,
@@ -11,7 +11,9 @@ from sqlmodel import (
     Session,
     UniqueConstraint,
     create_engine,
+    func,
     insert,
+    or_,
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -34,7 +36,6 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 engine = create_async_engine(f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
     pool_size=10,
     max_overflow=20,
-    echo=True
 )
 
 # Helpers
@@ -104,9 +105,23 @@ class User(SQLModel, table=True):
 
     _table_args__ = (UniqueConstraint("id", "remote_id"),)
 
-    def all_rooms(self) -> list["Room"]:
+    async def all_rooms(self, session: AsyncSession) -> Sequence["Room"]:
         """Returns a list of rooms where the user is either a participant or the owner"""
-        return self.rooms + self.owned_rooms
+        print("user id: ", self.id)
+        rooms_stmt = (
+            select(Room)
+            .join(RoomParticipantLink, isouter=True)
+            .where(
+                or_(
+                    Room.owner_id == self.id,
+                    RoomParticipantLink.user_id == self.id
+                )
+            )
+            .distinct()
+        )
+
+        rooms = await session.execute(rooms_stmt)
+        return rooms.scalars().all()
 
     @classmethod
     async def from_remote_or_db(cls, remote_id, session: AsyncSession) -> "User":
@@ -177,8 +192,7 @@ class Room(RoomBase, table=True):
     __kafka_topic_prefix__: str = "room"
     __kafka_group_prefix__: str = "group"
 
-    # @with_session
-    async def add_participant(self, session: Session, participant: "User"):
+    async def add_participant(self, session: AsyncSession, participant: "User"):
         """add a participant to the room and commit to db.
 
         Raises:
@@ -186,17 +200,23 @@ class Room(RoomBase, table=True):
             RoomValidationException: if the room is private and the room has > 2 participants
         """
 
-        if self.room_type == RoomType.PRIVATE and await self.is_user_in_room(session, participant):
+        if (
+                self.room_type == RoomType.PRIVATE
+                and await self.is_user_in_room(session, participant)
+        ):
             raise RoomValidationException("Participant is already in the room")
 
-        if self.room_type == RoomType.PRIVATE and len(self.participants) == 1:
+        if (
+            self.room_type == RoomType.PRIVATE
+            and await self.participant_count(session)
+        ) == 1:
             raise RoomValidationException("Room is private")
 
         room_participant = RoomParticipantLink(user_id=participant.id, room_id=self.id)
         session.add(room_participant)
-        session.commit()
+        await session.commit()
 
-    async def add_message(self, session: Session, message: "Message"):
+    async def add_messages(self, session: AsyncSession, message: "Message"):
         """**Deprecated** add a message to the room.
 
         Args:
@@ -219,8 +239,38 @@ class Room(RoomBase, table=True):
 
         return message
 
-    async def is_message_in_room(self, message: "Message"):
-        return message in self.messages
+    async def participants_(self, session: AsyncSession):
+        participant_stmt = (
+            select(User)
+            .join(
+                RoomParticipantLink,
+                RoomParticipantLink.user_id == User.id,
+                isouter=True
+            )
+            .where(RoomParticipantLink.room_id == self.id)
+            .distinct()
+        )
+        participants = await session.execute(participant_stmt)
+        return participants.scalars().all()
+
+    async def participant_count(self, session: AsyncSession):
+        participant_count_stmt = (
+            select(func.count())
+            .select_from(RoomParticipantLink)
+            .where(RoomParticipantLink.room_id == self.id)
+        )
+        participant_count_result = await session.execute(participant_count_stmt)
+        return participant_count_result.scalars().one()
+
+    async def is_message_in_room(self, session: AsyncSession, message: "Message"):
+        messages_stmt = (
+            select(Message)
+                .where(Message.room_id == self.id)
+        ) 
+        result = await session.execute(messages_stmt)
+        messages = result.scalars().all()
+
+        return message in messages
 
     async def is_user_in_room(self, session: AsyncSession, user: "User"):
         """checks if a user is in the room as a participant or owner
@@ -231,12 +281,13 @@ class Room(RoomBase, table=True):
         Returns:
             bool: True if the user is in the room
         """
-        participant_stmt = (
-            select(User)
-            .join(RoomParticipantLink)
-            .where(Room.id == self.id)
-        )
-        participants = session.exec(participant_stmt).all()
+        # participant_stmt = (
+        #     select(User)
+        #     .join(RoomParticipantLink)
+        #     .where(Room.id == self.id)
+        # )
+        # participants = await session.execute(participant_stmt)
+        participants = await self.participants_(session)
 
         return (
             user.id in [participant.id for participant in participants]
@@ -273,7 +324,7 @@ class Room(RoomBase, table=True):
             raise RoomNotFoundException("Room not found")
         return room
 
-    async def send_message(self, messages: list["Message"]):
+    async def send_message(self,session: AsyncSession, messages: list["Message"]):
         """send a message to a kafka topic representing the room. make sure
         that the message in question is refreshed before sending as this might
         cause a race condition.
@@ -297,7 +348,7 @@ class Room(RoomBase, table=True):
                 if message.id == None:
                     raise MessageNotFoundException("message id is not set")
 
-                if not await self.is_message_in_room(message):
+                if not await self.is_message_in_room(session, message):
                     raise RoomValidationException("Message is not in the room")
 
                 if self.id == None:
@@ -331,9 +382,11 @@ class Room(RoomBase, table=True):
             # Consume messages
             async for msg in consumer:
                 msg = json.loads(msg.value.decode('utf-8'))
-                with AsyncSession(engine) as session:
-                    message = session.exec(
-                        select(Message).where(Message.id == msg["message_id"])).first()
+                async with AsyncSession(engine) as session:
+                    message = await session.execute(
+                        select(Message).where(Message.id == msg["message_id"]))
+                    message = message.scalars().first()
+
                     assert message is not None
 
                     if message.owner_id == user.id:
