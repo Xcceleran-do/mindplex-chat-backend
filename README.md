@@ -1,51 +1,79 @@
-# A Backend Chat Service For the Mindplex Project
+# Mindplex Chat Backend
+
+This is the backend for the Mindplex Chat application. It provides a RESTful API for managing chat rooms and users, as well as a WebSocket interface for real-time communication.
 
 ## Features
 
-- Basic messaging capabilities
-- Private chat
-- Temporary universal group chat
+- Private and group chat rooms
+- User authentication and authorization
 - Message encryption
-- User authoriaztion
+- Real-time messaging with WebSockets
+- Kafka integration for message queuing
+- Celery for background tasks
 
-## Usage
+## Getting Started
 
-### Install
+### Prerequisites
 
+- Docker
+- Docker Compose
+- Python 3.9+
+- pip
+
+### Installation
+
+1.  Clone the repository:
+
+    ```bash
+    git clone https://github.com/arist76/telegram-chat-backend.git
+    ```
+
+2.  Navigate to the project directory:
+
+    ```bash
+    cd telegram-chat-backend
+    ```
+
+3.  Create a `.env` file from the `.env.example` file and update it with your environment variables.
+
+4.  Build and run the application with Docker Compose:
+
+    ```bash
+    docker-compose up -d
+    ```
+
+The application will be available at `http://localhost:9010`.
+
+### Running the Tests
+
+To run the tests, you can use the following command:
+
+```bash
+docker-compose exec web pytest
 ```
-git clone https://github.com/arist76/telegram-chat-backend.git
-cd telegram-chat-backend
-pip install -r requirements.txt
-fastapi run --host 0.0.0.0 --port 8000
-```
 
-### Create Rooms
+## API Reference
 
-Rooms are created by sending a POST request to `/rooms` with the room type. A room 
-type can be private or universal. private rooms can only have one participant and
-one owner and universal rooms don't need participants as they can be accessed by
-anyone.
+The API is documented with Swagger UI. You can access it at `http://localhost:9010/docs`.
 
+### Authentication
 
-### Websocket
+Authentication is handled via JWT. You need to provide a valid JWT in the `Authorization` header and the username in the `X-Username` header. You can get the Authorization token from the mindplex servers.
 
-For live messaging you can use a websocket connection to `/ws/rooms/<room_id>/`.
-you can send and expect to receive websocket connections using these types.
+### WebSockets
 
-#### Message
+The WebSocket interface is available at `/ws/rooms/{room_id}/`. You can send and receive messages in the following format:
 
-A type for sending messages
+**Send:**
 
 ```json
 {
     "type": "text",
-    "message": "Hello",
+    "message": "Hello, world!"
 }
 ```
 
-#### Response
-
-Expect responses in this format 
+**Receive:**
 
 ```json
 {
@@ -53,12 +81,11 @@ Expect responses in this format
     "error": null,
     "message": {
         "type": "text",
-        "message": "Hello"
+        "message": "Hello, world!"
     }
 }
 ```
 
+### Server-Sent Events (SSE)
 
-## API Reference
-
-see `/docs` for detailed swagger docs.
+**Note:** The SSE feature is currently under construction.
