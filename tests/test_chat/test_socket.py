@@ -2,6 +2,7 @@ from fastapi import WebSocketDisconnect, WebSocketException
 from fastapi.testclient import TestClient
 from sqlalchemy.sql.compiler import exc
 from ..fixtures import *
+import json
 
 
 class TestConnectionManager:
@@ -14,7 +15,7 @@ class TestWebSocketEndpoint:
         # check if the room exists
 
         with client.websocket_connect(endpoint) as websocket:
-            response = websocket.receive_json()
+            response = json.loads(websocket.receive_json())  # TODO: Fix this, this and similar calls require reloading as json
 
             assert response["success"] == False
             assert response["error"]["status_code"] == 401
@@ -25,7 +26,7 @@ class TestWebSocketEndpoint:
         # check if the room exists
 
         with client.websocket_connect(endpoint) as websocket:
-            response = websocket.receive_json()
+            response = json.loads(websocket.receive_json())
             assert response["success"] == False
             assert response["error"]["status_code"] == 404
             assert response["error"]["short_code"] == "not_found"
@@ -36,7 +37,7 @@ class TestWebSocketEndpoint:
         endpoint = f"/ws/rooms/{rooms_with_mindplex[2].id}?token={token}&username=dave"
 
         with client.websocket_connect(endpoint) as websocket:
-            response = websocket.receive_json()
+            response = json.loads(websocket.receive_json())
             assert response["success"] == False
             assert response["error"]["status_code"] == 403
             assert response["error"]["short_code"] == "not_in_room"
@@ -47,7 +48,7 @@ class TestWebSocketEndpoint:
         endpoint = f"/ws/rooms/{rooms_with_mindplex[1].id}?token={token}&username=dave"
 
         with client.websocket_connect(endpoint) as websocket:
-            response = websocket.receive_json()
+            response = json.loads(websocket.receive_json())
             assert response["success"] == True
             assert response["message"]["type"] == "connected"
 

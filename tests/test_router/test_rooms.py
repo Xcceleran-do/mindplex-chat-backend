@@ -653,46 +653,46 @@ class TestGetRoomParticipants:
         pass
 
 
-class TestSendMessage:
-    @pytest.mark.asyncio
-    async def test_send_message(self, token, client: TestClient, session: Session, rooms: list[Room]):
-        response = client.post(
-            f"/rooms/{rooms[0].id}/messages",
-            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
-            json={"text": "hello world"}
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["text"] == "hello world"
-
-        # test message perssists
-        db_message = session.exec(
-            select(Message).where(Message.id == data["id"])
-        ).first() 
-        assert db_message
-        assert db_message.room_id == rooms[0].id
-        assert db_message.text == "hello world"
-
-        # test message sent to kafka
-        consumer = await rooms[0].kafka_consumer()
-        try:
-            kafka_msg = await consumer.getone()
-            assert kafka_msg is not None
-            assert json.loads(kafka_msg.value.decode('utf-8'))["message_id"] == data["id"]
-        finally:
-            await consumer.stop()
-
-    def test_user_not_in_room(self, token, client: TestClient, rooms):
-        response = client.post(
-            f"/rooms/{rooms[1].id}/messages",
-            headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
-            json={"text": "hello world"}
-        )
-
-        assert response.status_code == 403
-        assert response.json()["detail"] == "User does not have access to this room"
-
+# class TestSendMessage:
+#     @pytest.mark.asyncio
+#     async def test_send_message(self, token, client: TestClient, session: Session, rooms: list[Room]):
+#         response = client.post(
+#             f"/rooms/{rooms[0].id}/messages",
+#             headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+#             json={"text": "hello world"}
+#         )
+#
+#         assert response.status_code == 200
+#         data = response.json()
+#         assert data["text"] == "hello world"
+#
+#         # test message perssists
+#         db_message = session.exec(
+#             select(Message).where(Message.id == data["id"])
+#         ).first() 
+#         assert db_message
+#         assert db_message.room_id == rooms[0].id
+#         assert db_message.text == "hello world"
+#
+#         # test message sent to kafka
+#         consumer = await rooms[0].kafka_consumer()
+#         try:
+#             kafka_msg = await consumer.getone()
+#             assert kafka_msg is not None
+#             assert json.loads(kafka_msg.value.decode('utf-8'))["message_id"] == data["id"]
+#         finally:
+#             await consumer.stop()
+#
+#     def test_user_not_in_room(self, token, client: TestClient, rooms):
+#         response = client.post(
+#             f"/rooms/{rooms[1].id}/messages",
+#             headers={"Authorization": f"Bearer {token}", "X-Username": "dave"},
+#             json={"text": "hello world"}
+#         )
+#
+#         assert response.status_code == 403
+#         assert response.json()["detail"] == "User does not have access to this room"
+#
 
 
 

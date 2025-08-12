@@ -9,13 +9,12 @@
 	import { twMerge } from "tailwind-merge";
 	import { clsx } from "clsx";
 	import type { ClassValue } from "clsx";
-	import {  BACKEND_HOST  } from '$lib/api';
 
 	let { data } = $props();
 
 	let ws: WebSocket | undefined = undefined;
 
-	let useSse = true;
+	let useSse = false;
 	
 	if (useSse) {
 		if (browser) {

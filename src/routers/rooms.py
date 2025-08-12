@@ -242,6 +242,8 @@ async def send_message(
     session: Annotated[Session, Depends(get_session)],
     user: Annotated[User, Depends(get_user_dep)],
 ):
+    raise HTTPException(status_code=501, detail="Sending messages through SSE not implemented")
+
     try:
         room = await Room.get_by_id(room_id, session, raise_exc=True)
     except RoomNotFoundException:
