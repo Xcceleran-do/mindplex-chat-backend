@@ -8,7 +8,7 @@ name: Deploy Staging to AWS ECS
 
 on:
   push:
-    branches: ["sta"]
+    branches: ["main"]
 
 env:
   AWS_REGION: us-east-1
