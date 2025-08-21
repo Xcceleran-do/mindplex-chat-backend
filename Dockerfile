@@ -18,4 +18,4 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 80
 
-CMD ["fastapi", "dev", "./src/main.py", "--port", "80"]
+CMD ["fastapi", "dev", "./src/main.py", "--no-access-log", "--log-level", "info", "--port", "80"]

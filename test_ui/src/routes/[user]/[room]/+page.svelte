@@ -39,7 +39,7 @@
 	} else {
 		if (browser) {
 			ws = new WebSocket(
-				`ws://localhost:9010/ws/rooms/${data.currentRoom.id}?token=${data.token}&username=${data.username}`
+				`ws://stagingchat.mindplex.ai/ws/rooms/${data.currentRoom.id}?token=${data.token}&username=${data.username}`
 			);
 
 			ws.onopen = () => {
